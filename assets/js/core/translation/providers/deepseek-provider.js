@@ -14,6 +14,9 @@ class DeepseekProvider extends TranslationProvider {
 
         // 默认翻译提示模板
         this.defaultPromptTemplate = '请将以下{from}文本翻译成{to}，保持原意，不要添加任何解释，直接返回翻译结果\n\n{text}';
+
+        // 默认标准化提示模板
+        this.defaultStandardizeTemplate = 'Please provide a concise English description of this sound effect in 2-5 words. Only return the description without any additional text or explanation.\n\n{text}';
     }
 
     /**
@@ -198,6 +201,87 @@ class DeepseekProvider extends TranslationProvider {
         }
 
         return cleaned.trim();
+    }
+
+    /**
+     * 标准化处理文本（生成简短的英文描述）
+     * @param {string} text - 要处理的文本
+     * @param {string} language - 语言代码
+     * @param {Object} options - 选项（如命名风格等）
+     * @returns {Promise<string>} 处理结果
+     */
+    async standardize(text, language, options = {}) {
+        try {
+            Logger.debug(`使用Deepseek标准化处理: ${text}`);
+
+            // 检查API密钥
+            const apiKey = this.settings.apiKeys?.deepseek;
+            if (!apiKey) {
+                throw new Error('未设置Deepseek API密钥');
+            }
+
+            // 仅使用deepseek-chat模型
+            const model = 'deepseek-chat';
+
+            // 构建提示
+            const prompt = this.defaultStandardizeTemplate.replace(/{text}/g, text);
+
+            // 构建请求体
+            const requestBody = {
+                model: model,
+                messages: [
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
+                ],
+                temperature: 0.1, // 低温度以获得更确定性的结果
+                max_tokens: 100
+            };
+
+            // 发送请求
+            const response = await fetch(this.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`HTTP错误 ${response.status}: ${errorData.error?.message || response.statusText}`);
+            }
+
+            // 解析结果
+            const result = await response.json();
+
+            if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+                throw new Error('处理结果无效');
+            }
+
+            // 提取文本
+            let standardizedText = result.choices[0].message.content.trim();
+
+            if (!standardizedText) {
+                throw new Error('处理结果为空');
+            }
+
+            // 清理结果（移除引号和解释性文本）
+            standardizedText = this._cleanTranslation(standardizedText);
+
+            // 应用命名风格
+            if (options.style && options.style !== 'none') {
+                standardizedText = this.formatText(standardizedText, options.style, options.separator);
+            }
+
+            Logger.debug(`标准化结果: ${standardizedText}`);
+            return standardizedText;
+        } catch (error) {
+            Logger.error('Deepseek标准化处理失败', error);
+            throw new Error(`标准化处理失败: ${error.message}`);
+        }
     }
 
     /**

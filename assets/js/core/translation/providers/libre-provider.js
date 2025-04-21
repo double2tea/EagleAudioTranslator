@@ -11,7 +11,7 @@ class LibreTranslateProvider extends TranslationProvider {
         super(settings);
         this.endpoint = (settings?.apiEndpoint) || 'https://libretranslate.com/translate';
     }
-    
+
     /**
      * 获取提供者ID
      * @returns {string} 提供者ID
@@ -19,7 +19,7 @@ class LibreTranslateProvider extends TranslationProvider {
     getId() {
         return 'libre';
     }
-    
+
     /**
      * 获取提供者名称
      * @returns {string} 提供者名称
@@ -27,7 +27,7 @@ class LibreTranslateProvider extends TranslationProvider {
     getName() {
         return 'LibreTranslate';
     }
-    
+
     /**
      * 是否需要API密钥
      * @returns {boolean} 是否需要API密钥
@@ -35,7 +35,7 @@ class LibreTranslateProvider extends TranslationProvider {
     requiresApiKey() {
         return false;
     }
-    
+
     /**
      * 获取支持的语言列表
      * @returns {Promise<Array<Object>>} 支持的语言列表
@@ -46,7 +46,7 @@ class LibreTranslateProvider extends TranslationProvider {
             if (!response.ok) {
                 throw new Error(`HTTP错误 ${response.status}`);
             }
-            
+
             const languages = await response.json();
             return languages.map(lang => ({
                 code: lang.code,
@@ -69,7 +69,7 @@ class LibreTranslateProvider extends TranslationProvider {
             ];
         }
     }
-    
+
     /**
      * 执行翻译
      * @param {string} text - 要翻译的文本
@@ -80,7 +80,7 @@ class LibreTranslateProvider extends TranslationProvider {
     async translate(text, from, to) {
         try {
             Logger.debug(`使用LibreTranslate翻译: ${text} (${from} -> ${to})`);
-            
+
             const response = await fetch(this.endpoint, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -94,22 +94,48 @@ class LibreTranslateProvider extends TranslationProvider {
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP错误 ${response.status}`);
             }
-            
+
             const result = await response.json();
-            
+
             if (!result.translatedText) {
                 throw new Error('翻译结果无效');
             }
-            
+
             Logger.debug(`翻译结果: ${result.translatedText}`);
             return result.translatedText;
         } catch (error) {
             Logger.error('LibreTranslate翻译失败', error);
             throw new Error(`翻译失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 标准化处理文本（生成简短的英文描述）
+     * @param {string} text - 要处理的文本
+     * @param {string} language - 语言代码
+     * @param {Object} options - 选项（如命名风格等）
+     * @returns {Promise<string>} 处理结果
+     */
+    async standardize(text, language, options = {}) {
+        try {
+            Logger.debug(`使用LibreTranslate标准化处理: ${text}`);
+
+            // LibreTranslate不支持标准化处理，所以我们只能返回原始文本
+            // 应用命名风格
+            let standardizedText = text;
+            if (options.style && options.style !== 'none') {
+                standardizedText = this.formatText(standardizedText, options.style, options.separator);
+            }
+
+            Logger.debug(`标准化结果: ${standardizedText}`);
+            return standardizedText;
+        } catch (error) {
+            Logger.error('LibreTranslate标准化处理失败', error);
+            throw new Error(`标准化处理失败: ${error.message}`);
         }
     }
 }
