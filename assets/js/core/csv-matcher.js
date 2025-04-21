@@ -391,21 +391,66 @@ class CSVMatcher {
         }
 
         // 6. 正则表达式匹配
-        // 尝试使用一些常见的正则表达式模式进行匹配
+        // 从术语库中提取常见的音效关键词来生成正则表达式
+        const soundEffectKeywords = new Set();
+        const audioFileExtensions = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'alac', 'ape', 'opus', 'webm', 'mid', 'midi'];
+
+        // 从术语库中提取关键词
+        for (const term of this.terms) {
+            // 添加源术语
+            if (term.source && term.source.length > 3) {
+                soundEffectKeywords.add(term.source.toLowerCase());
+            }
+
+            // 从同义词中提取关键词
+            if (term.synonyms) {
+                const synonyms = term.synonyms.split(',').map(s => s.trim().toLowerCase());
+                for (const synonym of synonyms) {
+                    if (synonym && synonym.length > 3) {
+                        soundEffectKeywords.add(synonym);
+                    }
+                }
+            }
+        }
+
+        // 构建正则表达式模式
         const regexPatterns = [
             // 匹配带数字的版本号，如 "v1.2.3"
             { pattern: /v\d+(\.\d+)*/, type: 'version' },
-            // 匹配常见的文件后缀，如 ".mp3", ".wav"
-            { pattern: /\.(mp3|wav|ogg|flac|aac)\b/i, type: 'audio_file' },
-            // 匹配常见的音效类型，如 "pop", "whoosh", "explosion"
-            { pattern: /\b(pop|whoosh|swoosh|explosion|bang|crash|thud)\b/i, type: 'sound_effect' }
+            // 匹配常见的文件后缀
+            { pattern: new RegExp('\\.('+audioFileExtensions.join('|')+')\\b', 'i'), type: 'audio_file' }
         ];
+
+        // 如果有足够的关键词，添加音效关键词正则表达式
+        if (soundEffectKeywords.size > 0) {
+            // 取前20个关键词构建正则表达式，避免正则表达式过长
+            const keywordsArray = Array.from(soundEffectKeywords).slice(0, 20);
+            regexPatterns.push({
+                pattern: new RegExp('\\b('+keywordsArray.join('|')+')\\b', 'i'),
+                type: 'sound_effect'
+            });
+        }
 
         for (const regexObj of regexPatterns) {
             if (regexObj.pattern.test(lowerText)) {
                 // 如果正则表达式匹配，尝试找到相关的术语
                 for (const term of this.terms) {
-                    if (term.source.toLowerCase().includes(regexObj.type)) {
+                    // 对于音效关键词，检查是否在正则表达式中匹配
+                    if (regexObj.type === 'sound_effect') {
+                        const match = lowerText.match(regexObj.pattern);
+                        if (match && match[1] &&
+                            (term.source.toLowerCase().includes(match[1]) ||
+                             (term.synonyms && term.synonyms.toLowerCase().includes(match[1])))) {
+                            matches.push({
+                                term: term,
+                                score: this.matchSettings.priorityWeights.regexMatch,
+                                matchType: 'regex_' + regexObj.type
+                            });
+                            break;
+                        }
+                    }
+                    // 对于其他类型，使用原来的匹配方式
+                    else if (term.source.toLowerCase().includes(regexObj.type)) {
                         matches.push({
                             term: term,
                             score: this.matchSettings.priorityWeights.regexMatch,
