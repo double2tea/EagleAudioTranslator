@@ -12,53 +12,28 @@ class CSVMatcher {
         this.categories = [];
         this.loaded = false;
         this.specialRules = [];
+        this.aiClassifier = null; // AI辅助分类器
 
         // 匹配设置
         this.matchSettings = {
-            // 多词匹配策略: 'exact'(精确匹配), 'partial'(部分匹配), 'fuzzy'(模糊匹配), 'semantic'(语义匹配)
-            multiWordMatchStrategy: 'semantic',
+            // 多词匹配策略: 'exact'(精确匹配), 'partial'(部分匹配), 'fuzzy'(模糊匹配)
+            multiWordMatchStrategy: 'partial',
             // 多词匹配时是否考虑词序
             respectWordOrder: true,
             // 匹配优先级权重
             priorityWeights: {
+                aiMatch: 120,          // AI辅助匹配权重
                 exactMatch: 100,       // 精确匹配权重
                 multiWordMatch: 80,    // 多词匹配权重
                 containsMatch: 60,     // 包含匹配权重
                 synonymMatch: 40,      // 同义词匹配权重
                 regexMatch: 30,        // 正则表达式匹配权重
-                partialMatch: 20,      // 部分匹配权重
-                semanticMatch: 70,     // 语义匹配权重
-                contextMatch: 65,      // 上下文匹配权重
-                editDistanceMatch: 25  // 编辑距离匹配权重
+                partialMatch: 20       // 部分匹配权重
             },
             // 当有多个匹配结果时的策略: 'highestPriority'(最高优先级), 'firstMatch'(第一个匹配), 'allMatches'(所有匹配)
             multiMatchStrategy: 'highestPriority',
-            // 模糊匹配设置
-            fuzzyMatchSettings: {
-                // 编辑距离阈值，越小越严格
-                maxEditDistance: 2,
-                // 最小匹配字符数
-                minMatchLength: 3,
-                // 模糊匹配阈值，范围从0到1，越大越宽松
-                fuzzyThreshold: 0.7
-            },
-            // 上下文匹配设置
-            contextMatchSettings: {
-                // 上下文关键词权重
-                keywordWeights: {
-                    'sound': 1.5,       // 声音相关
-                    'effect': 1.5,      // 音效相关
-                    'audio': 1.5,       // 音频相关
-                    'music': 1.2,       // 音乐相关
-                    'voice': 1.2,       // 语音相关
-                    'noise': 1.2,       // 噪音相关
-                    'ambience': 1.2,    // 环境音相关
-                    'foley': 1.3,       // 拉音相关
-                    'sfx': 1.5          // 特效相关
-                },
-                // 上下文匹配的最大距离
-                maxDistance: 3
-            }
+            // 是否启用AI辅助分类
+            useAIClassification: false
         };
 
         // 特殊规则设置
@@ -66,9 +41,6 @@ class CSVMatcher {
             defaultPriority: 10,
             multiMatchStrategy: 'highestPriority' // 可选值: 'highestPriority', 'firstMatch', 'allMatches'
         };
-
-        // 初始化缓存
-        this.matchCache = new Map();
 
         // 确保路径有效
         if (!csvPath) {
@@ -236,6 +208,29 @@ class CSVMatcher {
         return result.map(function(value) {
             return value.replace(/^"(.*)"$/, '$1').trim();
         });
+    }
+
+    /**
+     * 设置AI辅助分类器
+     * @param {boolean} enabled - 是否启用AI辅助分类
+     */
+    setAIClassifier(enabled) {
+        this.matchSettings.useAIClassification = enabled;
+
+        // 初始化AI分类器
+        if (enabled && window.AIClassifier) {
+            if (!this.aiClassifier) {
+                this.aiClassifier = new window.AIClassifier().init(enabled);
+                console.log('AI辅助分类器初始化成功');
+            } else {
+                this.aiClassifier.init(enabled);
+                console.log('AI辅助分类器已更新状态');
+            }
+        } else {
+            console.log('AI辅助分类器已禁用');
+        }
+
+        return this;
     }
 
     /**
@@ -590,11 +585,28 @@ class CSVMatcher {
     /**
      * 识别文本的分类
      * @param {string} text - 要识别的文本
-     * @returns {string} 分类名称或空字符串
+     * @param {Object} translationProvider - 翻译服务提供者（用于AI辅助分类）
+     * @returns {Promise<string>} 分类名称或空字符串
      */
-    identifyCategory(text) {
+    async identifyCategory(text, translationProvider = null) {
         if (!this.loaded || !text) {
             return '';
+        }
+
+        // 如果启用了AI辅助分类匹配并且提供了翻译服务
+        if (this.matchSettings.useAIClassification && this.aiClassifier && translationProvider) {
+            try {
+                // 使用AI辅助分类器获取分类信息
+                const aiClassification = await this.aiClassifier.getClassification(text, translationProvider);
+
+                if (aiClassification && aiClassification.catID) {
+                    console.log('使用AI辅助分类匹配结果:', text, '->', aiClassification.catID);
+                    return aiClassification.catID;
+                }
+            } catch (error) {
+                console.error('使用AI辅助分类匹配失败:', error);
+                // 失败时回退到传统匹配方式
+            }
         }
 
         // 直接使用改进后的findMatch方法来获取最佳匹配结果
@@ -706,33 +718,16 @@ class CSVMatcher {
             return { matched: false, score: 0 };
         }
 
-        // 检查缓存
-        const cacheKey = `${text}_${words.join('|')}`;
-        if (this.matchCache.has(cacheKey)) {
-            return this.matchCache.get(cacheKey);
-        }
-
         // 根据多词匹配策略选择匹配方式
-        let result;
         switch (this.matchSettings.multiWordMatchStrategy) {
             case 'exact':
-                result = this._exactWordMatch(text, words);
-                break;
+                return this._exactWordMatch(text, words);
             case 'fuzzy':
-                result = this._fuzzyWordMatch(text, words);
-                break;
-            case 'semantic':
-                result = this._semanticWordMatch(text, words);
-                break;
+                return this._fuzzyWordMatch(text, words);
             case 'partial':
             default:
-                result = this._partialWordMatch(text, words);
-                break;
+                return this._partialWordMatch(text, words);
         }
-
-        // 将结果存入缓存
-        this.matchCache.set(cacheKey, result);
-        return result;
     }
 
     /**
@@ -844,207 +839,6 @@ class CSVMatcher {
             matched: matchedWords >= threshold,
             score: matchedWords >= threshold ? score : 0,
             matchType: 'fuzzy'
-        };
-    }
-
-    /**
-     * 语义匹配 - 结合上下文和同义词进行智能匹配
-     * @param {string} text - 要检查的文本
-     * @param {Array<string>} words - 要检查的单词数组
-     * @returns {Object} 匹配结果和分数
-     * @private
-     */
-    _semanticWordMatch(text, words) {
-        // 先尝试精确匹配和部分匹配
-        const exactMatch = this._exactWordMatch(text, words);
-        if (exactMatch.matched) {
-            return exactMatch;
-        }
-
-        const partialMatch = this._partialWordMatch(text, words);
-        if (partialMatch.matched) {
-            return partialMatch;
-        }
-
-        const fuzzyMatch = this._fuzzyWordMatch(text, words);
-        if (fuzzyMatch.matched) {
-            return fuzzyMatch;
-        }
-
-        // 如果前几种匹配失败，尝试编辑距离匹配
-        const editDistanceMatch = this._editDistanceMatch(text, words);
-        if (editDistanceMatch.matched) {
-            return editDistanceMatch;
-        }
-
-        // 如果编辑距离匹配失败，尝试上下文匹配
-        const contextMatch = this._contextMatch(text, words);
-        if (contextMatch.matched) {
-            return contextMatch;
-        }
-
-        // 如果所有匹配都失败，返回不匹配
-        return { matched: false, score: 0, matchType: 'none' };
-    }
-
-    /**
-     * 编辑距离匹配 - 允许单词有少量的拼写错误
-     * @param {string} text - 要检查的文本
-     * @param {Array<string>} words - 要检查的单词数组
-     * @returns {Object} 匹配结果和分数
-     * @private
-     */
-    _editDistanceMatch(text, words) {
-        const maxDistance = this.matchSettings.fuzzyMatchSettings.maxEditDistance;
-        const minLength = this.matchSettings.fuzzyMatchSettings.minMatchLength;
-        let matchedWords = 0;
-        let totalScore = 0;
-
-        // 将文本分解为单词
-        const textWords = text.toLowerCase().split(/\s+/);
-
-        // 对每个要匹配的单词
-        for (const word of words) {
-            if (word.length < minLength) continue;
-
-            let bestDistance = Infinity;
-            let bestMatch = null;
-
-            // 与文本中的每个单词计算编辑距离
-            for (const textWord of textWords) {
-                if (textWord.length < minLength) continue;
-
-                const distance = this._levenshteinDistance(word.toLowerCase(), textWord.toLowerCase());
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestMatch = textWord;
-                }
-            }
-
-            // 如果找到了足够接近的匹配
-            if (bestDistance <= maxDistance) {
-                matchedWords++;
-                // 分数越接近越高
-                const similarity = 1 - (bestDistance / Math.max(word.length, bestMatch.length));
-                totalScore += similarity * this.matchSettings.priorityWeights.editDistanceMatch / words.length;
-            }
-        }
-
-        // 如果至少匹配了一半的单词，则认为是编辑距离匹配成功
-        const threshold = Math.ceil(words.length / 2);
-        return {
-            matched: matchedWords >= threshold,
-            score: matchedWords >= threshold ? totalScore : 0,
-            matchType: 'edit_distance'
-        };
-    }
-
-    /**
-     * 计算两个字符串之间的编辑距离（Levenshtein 距离）
-     * @param {string} a - 第一个字符串
-     * @param {string} b - 第二个字符串
-     * @returns {number} 编辑距离
-     * @private
-     */
-    _levenshteinDistance(a, b) {
-        if (a.length === 0) return b.length;
-        if (b.length === 0) return a.length;
-
-        const matrix = [];
-
-        // 初始化矩阵
-        for (let i = 0; i <= b.length; i++) {
-            matrix[i] = [i];
-        }
-
-        for (let j = 0; j <= a.length; j++) {
-            matrix[0][j] = j;
-        }
-
-        // 填充矩阵
-        for (let i = 1; i <= b.length; i++) {
-            for (let j = 1; j <= a.length; j++) {
-                if (b.charAt(i - 1) === a.charAt(j - 1)) {
-                    matrix[i][j] = matrix[i - 1][j - 1];
-                } else {
-                    matrix[i][j] = Math.min(
-                        matrix[i - 1][j - 1] + 1, // 替换
-                        matrix[i][j - 1] + 1,     // 插入
-                        matrix[i - 1][j] + 1      // 删除
-                    );
-                }
-            }
-        }
-
-        return matrix[b.length][a.length];
-    }
-
-    /**
-     * 上下文匹配 - 考虑文件名的上下文
-     * @param {string} text - 要检查的文本
-     * @param {Array<string>} words - 要检查的单词数组
-     * @returns {Object} 匹配结果和分数
-     * @private
-     */
-    _contextMatch(text, words) {
-        const lowerText = text.toLowerCase();
-        const contextKeywords = Object.keys(this.matchSettings.contextMatchSettings.keywordWeights);
-        let contextScore = 0;
-        let matchedContextWords = 0;
-
-        // 检查文本中是否包含上下文关键词
-        for (const keyword of contextKeywords) {
-            if (lowerText.includes(keyword)) {
-                const weight = this.matchSettings.contextMatchSettings.keywordWeights[keyword];
-                contextScore += weight;
-                matchedContextWords++;
-            }
-        }
-
-        // 如果没有上下文关键词，则不进行上下文匹配
-        if (matchedContextWords === 0) {
-            return { matched: false, score: 0, matchType: 'context' };
-        }
-
-        // 检查要匹配的单词是否与上下文关键词足够接近
-        const textWords = lowerText.split(/\s+/);
-        let wordProximityScore = 0;
-
-        for (const word of words) {
-            const wordLower = word.toLowerCase();
-
-            // 对于每个上下文关键词，计算与要匹配单词的距离
-            for (let i = 0; i < textWords.length; i++) {
-                if (textWords[i].includes(wordLower)) {
-                    // 在文本中找到了要匹配的单词
-                    // 检查前后是否有上下文关键词
-                    const maxDistance = this.matchSettings.contextMatchSettings.maxDistance;
-
-                    for (let j = Math.max(0, i - maxDistance); j <= Math.min(textWords.length - 1, i + maxDistance); j++) {
-                        if (i === j) continue; // 跳过当前单词
-
-                        for (const keyword of contextKeywords) {
-                            if (textWords[j].includes(keyword)) {
-                                // 计算距离分数，距离越近分数越高
-                                const distance = Math.abs(i - j);
-                                const proximityFactor = 1 - (distance / (maxDistance + 1));
-                                const keywordWeight = this.matchSettings.contextMatchSettings.keywordWeights[keyword];
-                                wordProximityScore += proximityFactor * keywordWeight;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 综合考虑上下文关键词分数和距离分数
-        const totalScore = (contextScore + wordProximityScore) * this.matchSettings.priorityWeights.contextMatch / 100;
-
-        // 如果分数足够高，则认为是上下文匹配成功
-        return {
-            matched: totalScore > 0,
-            score: totalScore,
-            matchType: 'context'
         };
     }
 }

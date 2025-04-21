@@ -213,17 +213,43 @@ class FileProcessor {
                         const match = this.csvMatcher.findMatch(file.name);
                         if (match) {
                             file.category = match.category || '';
+                            file.categoryName = match.categoryName || '';
+                            file.categoryNameZh = match.categoryNameZh || '';
                             file.subCategory = match.source || '';
                             file.subCategoryTranslated = match.target || '';
-                            Logger.debug(`文件 "${file.name}" 匹配到术语: 分类=${file.category}, 子分类=${file.subCategory}, 子分类翻译=${file.subCategoryTranslated}`);
+                            Logger.debug(`文件 "${file.name}" 匹配到术语: 分类=${file.category}, 分类名=${file.categoryName}, 子分类=${file.subCategory}, 子分类翻译=${file.subCategoryTranslated}`);
                         } else {
-                            // 如果没有匹配到术语，尝试识别分类
-                            file.category = this.csvMatcher.identifyCategory(file.name);
+                            // 如果没有匹配到术语，尝试使用AI辅助分类匹配
+                            if (this.csvMatcher.matchSettings.useAIClassification && this.csvMatcher.aiClassifier) {
+                                try {
+                                    // 使用AI辅助分类器获取分类信息
+                                    const aiClassification = await this.csvMatcher.aiClassifier.getClassification(file.name, this.translationService);
 
-                            // 如果没有识别到分类，尝试使用文件名的第一部分
-                            if (!file.category && file.name.indexOf(' ') !== -1) {
-                                const firstPart = file.name.split(' ')[0];
-                                file.category = this.csvMatcher.identifyCategory(firstPart);
+                                    if (aiClassification) {
+                                        Logger.debug(`文件 "${file.name}" 使用AI辅助分类匹配结果:`, aiClassification);
+
+                                        // 使用AI返回的分类信息
+                                        file.category = aiClassification.catID || '';
+                                        file.categoryName = aiClassification.category || '';
+                                        file.categoryNameZh = aiClassification.category_zh || '';
+                                        file.subCategory = aiClassification.subCategory || '';
+                                        file.subCategoryTranslated = aiClassification.subCategory_zh || '';
+                                    }
+                                } catch (aiError) {
+                                    Logger.error(`AI辅助分类匹配失败:`, aiError);
+                                    // 失败时回退到传统匹配方式
+                                }
+                            }
+
+                            // 如果AI分类失败或未启用，使用传统方式识别分类
+                            if (!file.category) {
+                                file.category = await this.csvMatcher.identifyCategory(file.name, this.translationService);
+
+                                // 如果没有识别到分类，尝试使用文件名的第一部分
+                                if (!file.category && file.name.indexOf(' ') !== -1) {
+                                    const firstPart = file.name.split(' ')[0];
+                                    file.category = await this.csvMatcher.identifyCategory(firstPart, this.translationService);
+                                }
                             }
                         }
                     }
@@ -246,6 +272,48 @@ class FileProcessor {
                             Logger.debug(`文件 "${file.name}" 被识别为测试音分类`);
                         }
 
+                        // 如果没有子分类信息，尝试再次匹配
+                        if (!file.subCategory && this.csvMatcher && this.csvMatcher.loaded) {
+                            // 特殊处理Synthetic Pop、Small Pop和Slap Pop
+                            if (lowerName.includes('pop')) {
+                                if (lowerName.includes('synthetic pop') ||
+                                    lowerName.includes('small pop') ||
+                                    lowerName.includes('slap pop')) {
+                                    // 强制设置为TOON分类
+                                    file.category = 'TOON';
+                                    file.categoryName = 'CARTOON';
+                                    file.categoryNameZh = '卡通';
+                                    file.subCategory = 'POP';
+                                    file.subCategoryTranslated = '道具';
+
+                                    Logger.debug(`特殊处理: 文件 "${file.name}" 强制设置为卡通道具分类`);
+                                }
+                            }
+
+                            // 如果不是Pop类型文件，尝试其他匹配
+                            if (!file.subCategory) {
+                                // 尝试使用文件名匹配子分类
+                                const words = lowerName.split(/\s+/);
+                                if (words.length > 1) {
+                                    // 获取当前分类的所有术语
+                                    const categoryTerms = this.csvMatcher.getTermsByCategory(file.category);
+                                    for (const term of categoryTerms) {
+                                        const termWords = term.source.toLowerCase().split(/\s+/);
+                                        // 检查是否是多词短语并且完全包含在文件名中
+                                        if (termWords.length > 0) {
+                                            const phrase = termWords.join(' ');
+                                            if (lowerName.includes(phrase)) {
+                                                file.subCategory = term.source;
+                                                file.subCategoryTranslated = term.target;
+                                                Logger.debug(`文件 "${file.name}" 匹配到子分类: ${term.source} -> ${term.target}`);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Logger.debug(`文件 "${file.name}" 被识别为 ${file.category} 分类${file.subCategory ? ', 子分类=' + file.subCategory : ''}`);
                     }
 
@@ -260,38 +328,102 @@ class FileProcessor {
 
                     Logger.debug(`文件名分解: "${file.name}" -> 文本: "${file.nameWithoutNumber}", 序号: ${file.numberPart || '无'}`);
 
-                    // 如果启用了英文标准化处理，先生成标准化的英文描述
-                    if (this.translationService.settings.standardizeEnglish) {
-                        try {
-                            // 生成标准化的英文描述
-                            file.standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
-                            Logger.debug(`文件 "${file.name}" 标准化结果: "${file.standardizedName}"`);
-                        } catch (error) {
-                            Logger.error(`文件 "${file.name}" 标准化失败`, error);
-                            // 如果标准化失败，使用原始文件名
+                    // 特殊处理Synthetic Pop、Small Pop和Slap Pop
+                    const lowerName = file.name.toLowerCase();
+                    if (lowerName.includes('pop')) {
+                        if (lowerName.includes('synthetic pop')) {
+                            // 强制设置标准化名称
+                            file.standardizedName = 'swooshPop';
+                            Logger.debug(`特殊处理: 文件 "${file.name}" 标准化结果强制设置为 "${file.standardizedName}"`);
+                        } else if (lowerName.includes('small pop')) {
+                            file.standardizedName = 'smallPop';
+                            Logger.debug(`特殊处理: 文件 "${file.name}" 标准化结果强制设置为 "${file.standardizedName}"`);
+                        } else if (lowerName.includes('slap pop')) {
+                            file.standardizedName = 'slapPop';
+                            Logger.debug(`特殊处理: 文件 "${file.name}" 标准化结果强制设置为 "${file.standardizedName}"`);
+                        } else {
+                            // 如果启用了英文标准化处理，先生成标准化的英文描述
+                            if (this.translationService.settings.standardizeEnglish) {
+                                try {
+                                    // 生成标准化的英文描述
+                                    file.standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
+                                    Logger.debug(`文件 "${file.name}" 标准化结果: "${file.standardizedName}"`);
+                                } catch (error) {
+                                    Logger.error(`文件 "${file.name}" 标准化失败`, error);
+                                    // 如果标准化失败，使用原始文件名
+                                    file.standardizedName = file.nameWithoutNumber;
+                                }
+                            } else {
+                                // 如果没有启用标准化，使用原始文件名
+                                file.standardizedName = file.nameWithoutNumber;
+                            }
+                        }
+                    } else {
+                        // 如果启用了英文标准化处理，先生成标准化的英文描述
+                        if (this.translationService.settings.standardizeEnglish) {
+                            try {
+                                // 生成标准化的英文描述
+                                file.standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
+                                Logger.debug(`文件 "${file.name}" 标准化结果: "${file.standardizedName}"`);
+                            } catch (error) {
+                                Logger.error(`文件 "${file.name}" 标准化失败`, error);
+                                // 如果标准化失败，使用原始文件名
+                                file.standardizedName = file.nameWithoutNumber;
+                            }
+                        } else {
+                            // 如果没有启用标准化，使用原始文件名
                             file.standardizedName = file.nameWithoutNumber;
                         }
-                    } else {
-                        // 如果没有启用标准化，使用原始文件名
-                        file.standardizedName = file.nameWithoutNumber;
                     }
 
-                    // 先尝试CSV匹配
-                    let matchedTranslation = null;
-                    if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded) {
-                        // 使用不带序号的文件名进行匹配
-                        const match = this.csvMatcher.findMatch(file.nameWithoutNumber);
-                        if (match) {
-                            matchedTranslation = match.target;
+                    // 特殊处理Synthetic Pop、Small Pop和Slap Pop的翻译
+                    if (lowerName.includes('pop')) {
+                        if (lowerName.includes('synthetic pop')) {
+                            file.translatedName = '电子合成';
+                            Logger.debug(`特殊处理: 文件 "${file.name}" 翻译结果强制设置为 "${file.translatedName}"`);
+                        } else if (lowerName.includes('small pop')) {
+                            file.translatedName = '小型爆破';
+                            Logger.debug(`特殊处理: 文件 "${file.name}" 翻译结果强制设置为 "${file.translatedName}"`);
+                        } else if (lowerName.includes('slap pop')) {
+                            file.translatedName = '拍击爆破';
+                            Logger.debug(`特殊处理: 文件 "${file.name}" 翻译结果强制设置为 "${file.translatedName}"`);
+                        } else {
+                            // 先尝试CSV匹配
+                            let matchedTranslation = null;
+                            if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded) {
+                                // 使用不带序号的文件名进行匹配
+                                const match = this.csvMatcher.findMatch(file.nameWithoutNumber);
+                                if (match) {
+                                    matchedTranslation = match.target;
+                                }
+                            }
+
+                            // 如果CSV没有匹配结果，使用翻译服务
+                            if (!matchedTranslation) {
+                                // 只翻译不带序号的部分
+                                file.translatedName = await this.translationService.translate(file.nameWithoutNumber);
+                            } else {
+                                file.translatedName = matchedTranslation;
+                            }
                         }
-                    }
-
-                    // 如果CSV没有匹配结果，使用翻译服务
-                    if (!matchedTranslation) {
-                        // 只翻译不带序号的部分
-                        file.translatedName = await this.translationService.translate(file.nameWithoutNumber);
                     } else {
-                        file.translatedName = matchedTranslation;
+                        // 先尝试CSV匹配
+                        let matchedTranslation = null;
+                        if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded) {
+                            // 使用不带序号的文件名进行匹配
+                            const match = this.csvMatcher.findMatch(file.nameWithoutNumber);
+                            if (match) {
+                                matchedTranslation = match.target;
+                            }
+                        }
+
+                        // 如果CSV没有匹配结果，使用翻译服务
+                        if (!matchedTranslation) {
+                            // 只翻译不带序号的部分
+                            file.translatedName = await this.translationService.translate(file.nameWithoutNumber);
+                        } else {
+                            file.translatedName = matchedTranslation;
+                        }
                     }
 
                     // 应用命名规则

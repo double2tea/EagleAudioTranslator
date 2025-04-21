@@ -842,6 +842,7 @@ function initTranslationSettings() {
     // 缓存和术语库设置
     const useCacheCheckbox = document.getElementById('useCache');
     const useCSVCheckbox = document.getElementById('useCSV');
+    const useAIClassificationCheckbox = document.getElementById('useAIClassification');
 
     if (useCacheCheckbox && window.pluginState.translationService) {
         useCacheCheckbox.addEventListener('change', function() {
@@ -859,6 +860,34 @@ function initTranslationSettings() {
 
         // 设置初始值
         window.pluginState.fileProcessor.setUseCSV(useCSVCheckbox.checked);
+    }
+
+    // AI辅助分类匹配设置
+    if (useAIClassificationCheckbox && window.pluginState.csvMatcher) {
+        useAIClassificationCheckbox.addEventListener('change', function() {
+            window.pluginState.csvMatcher.setAIClassifier(this.checked);
+
+            // 显示状态提示
+            updateStatus('AI辅助分类匹配功能已' + (this.checked ? '启用' : '禁用'));
+
+            // 如果启用了AI辅助分类匹配，但没有加载AI分类器脚本，显示警告
+            if (this.checked && !window.AIClassifier) {
+                console.warn('AI分类器脚本未加载，请检查是否已包含ai-classifier.js');
+                updateStatus('警告：AI分类器脚本未加载，该功能可能无法正常工作');
+            }
+        });
+
+        // 从本地存储加载设置（如果有）
+        const savedAIClassification = localStorage.getItem('useAIClassification');
+        if (savedAIClassification === 'true') {
+            useAIClassificationCheckbox.checked = true;
+            window.pluginState.csvMatcher.setAIClassifier(true);
+        }
+
+        // 保存到本地存储
+        useAIClassificationCheckbox.addEventListener('change', function() {
+            localStorage.setItem('useAIClassification', this.checked);
+        });
     }
 }
 

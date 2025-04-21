@@ -158,6 +158,16 @@
                                         <span class="toggle-label"><i class="fas fa-table"></i> 使用CSV术语库</span>
                                     </label>
                                 </div>
+                                <div class="setting-toggle">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="useAIClassification">
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label"><i class="fas fa-robot"></i> 使用AI辅助分类匹配</span>
+                                    </label>
+                                    <div class="setting-description">
+                                        <small>使用AI接口获取音效分类信息，提高匹配准确性（需要额外API请求）</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -534,6 +544,7 @@
     <script src="./assets/js/core/translation/providers/zhipu-provider.js"></script>
     <script src="./assets/js/core/translation/providers/deepseek-provider.js"></script>
     <script src="./assets/js/core/translation/translation-service.js"></script>
+    <script src="./assets/js/core/ai-classifier.js"></script>
     <script src="./assets/js/core/csv-matcher.js"></script>
     <script src="./assets/js/core/file-processor.js"></script>
     <script src="./assets/js/core/naming-rules.js"></script>
