@@ -260,6 +260,22 @@ class FileProcessor {
 
                     Logger.debug(`文件名分解: "${file.name}" -> 文本: "${file.nameWithoutNumber}", 序号: ${file.numberPart || '无'}`);
 
+                    // 如果启用了英文标准化处理，先生成标准化的英文描述
+                    if (this.translationService.settings.standardizeEnglish) {
+                        try {
+                            // 生成标准化的英文描述
+                            file.standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
+                            Logger.debug(`文件 "${file.name}" 标准化结果: "${file.standardizedName}"`);
+                        } catch (error) {
+                            Logger.error(`文件 "${file.name}" 标准化失败`, error);
+                            // 如果标准化失败，使用原始文件名
+                            file.standardizedName = file.nameWithoutNumber;
+                        }
+                    } else {
+                        // 如果没有启用标准化，使用原始文件名
+                        file.standardizedName = file.nameWithoutNumber;
+                    }
+
                     // 先尝试CSV匹配
                     let matchedTranslation = null;
                     if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded) {

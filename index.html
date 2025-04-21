@@ -117,10 +117,29 @@
                                 </div>
                                 <div class="setting-toggle">
                                     <label class="toggle">
-                                        <input type="checkbox" id="useAI" checked>
+                                        <input type="checkbox" id="standardizeEnglish">
                                         <span class="toggle-slider"></span>
                                         <span class="toggle-label"><i class="fas fa-robot"></i> 对英文进行标准化处理</span>
                                     </label>
+                                </div>
+
+                                <div id="namingStyleContainer" class="settings-group" style="display:none;">
+                                    <div class="setting-item">
+                                        <label for="namingStyle"><i class="fas fa-font"></i> 命名风格：</label>
+                                        <select id="namingStyle">
+                                            <option value="none">不处理</option>
+                                            <option value="camelCase">驼峰命名 (camelCase)</option>
+                                            <option value="PascalCase">帕斯卡命名 (PascalCase)</option>
+                                            <option value="snake_case">蛇形命名 (snake_case)</option>
+                                            <option value="kebab-case">烧烤命名 (kebab-case)</option>
+                                            <option value="custom">自定义分隔符</option>
+                                        </select>
+                                    </div>
+
+                                    <div id="customSeparatorContainer" class="setting-item" style="display:none;">
+                                        <label for="customSeparator"><i class="fas fa-minus"></i> 自定义分隔符：</label>
+                                        <input type="text" id="customSeparator" value="_" maxlength="1">
+                                    </div>
                                 </div>
                             </div>
 

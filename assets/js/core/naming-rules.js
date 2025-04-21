@@ -344,8 +344,8 @@ class NamingRules {
         }
 
         if (elements.fxName) {
-            // 使用不带序号的文件名
-            parts.push(file.nameWithoutNumber || file.name);
+            // 使用标准化的英文描述（如果有），否则使用不带序号的文件名
+            parts.push(file.standardizedName || file.nameWithoutNumber || file.name);
         }
 
         if (elements.fxName_zh) {

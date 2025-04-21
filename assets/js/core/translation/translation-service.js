@@ -26,7 +26,10 @@ class TranslationService {
                 openrouter: '',
                 libre: ''
             },
-            libreEndpoint: 'https://libretranslate.com/'
+            libreEndpoint: 'https://libretranslate.com/',
+            standardizeEnglish: false, // 是否对英文进行标准化处理
+            namingStyle: 'none', // 命名风格：'none', 'camelCase', 'PascalCase', 'snake_case', 'kebab-case', 'custom'
+            customSeparator: '_' // 自定义分隔符
         };
 
         // 注册默认提供者
@@ -194,6 +197,122 @@ class TranslationService {
     }
 
     /**
+     * 标准化处理文本（生成简短的英文描述）
+     * @param {string} text - 要处理的文本
+     * @returns {Promise<string>} 处理结果
+     */
+    async standardize(text) {
+        if (!this.activeProvider) {
+            throw new Error('未设置活动翻译提供者');
+        }
+
+        // 检查缓存
+        const cacheKey = `standardize:${this.activeProvider.getId()}:${text}`;
+        if (this.settings.useCache) {
+            const cached = this.cache.get(cacheKey);
+            if (cached) {
+                Logger.debug(`使用缓存的标准化结果: ${text} -> ${cached}`);
+                return cached;
+            }
+        }
+
+        try {
+            // 如果提供者支持标准化方法，则使用提供者的方法
+            if (typeof this.activeProvider.standardize === 'function') {
+                const options = {
+                    style: this.settings.namingStyle,
+                    separator: this.settings.customSeparator
+                };
+
+                const result = await this.activeProvider.standardize(text, 'en', options);
+
+                // 更新缓存
+                if (this.settings.useCache) {
+                    this.cache.set(cacheKey, result);
+                }
+
+                return result;
+            } else {
+                // 如果提供者不支持标准化方法，则使用翻译方法并添加特殊提示
+                const prompt = `Please provide a concise English description of this sound effect in 2-5 words: "${text}". Only return the description without any additional text.`;
+
+                const result = await this.activeProvider.translate(
+                    prompt,
+                    'en',
+                    'en'
+                );
+
+                // 提取结果中的描述部分（去除可能的引号和额外文本）
+                let cleanResult = result.replace(/^["']|["']$/g, '').trim();
+
+                // 如果结果还包含原始文本，则只保留第一部分
+                if (cleanResult.includes(text)) {
+                    cleanResult = cleanResult.split(text)[0].trim();
+                }
+
+                // 应用命名风格
+                cleanResult = this.formatText(cleanResult);
+
+                // 更新缓存
+                if (this.settings.useCache) {
+                    this.cache.set(cacheKey, cleanResult);
+                }
+
+                return cleanResult;
+            }
+        } catch (error) {
+            Logger.error(`标准化处理失败: ${text}`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 格式化文本（应用命名风格）
+     * @param {string} text - 要格式化的文本
+     * @returns {string} 格式化后的文本
+     */
+    formatText(text) {
+        if (!text) return text;
+
+        // 如果提供者支持格式化方法，则使用提供者的方法
+        if (this.activeProvider && typeof this.activeProvider.formatText === 'function') {
+            return this.activeProvider.formatText(text, this.settings.namingStyle, this.settings.customSeparator);
+        }
+
+        // 否则使用默认实现
+        // 先将文本分割成单词
+        const words = text.trim().split(/\s+/);
+
+        switch (this.settings.namingStyle) {
+            case 'camelCase':
+                return words.map((word, index) => {
+                    if (index === 0) {
+                        return word.toLowerCase();
+                    }
+                    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                }).join('');
+
+            case 'PascalCase':
+                return words.map(word => {
+                    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                }).join('');
+
+            case 'snake_case':
+                return words.map(word => word.toLowerCase()).join('_');
+
+            case 'kebab-case':
+                return words.map(word => word.toLowerCase()).join('-');
+
+            case 'custom':
+                return words.join(this.settings.customSeparator);
+
+            case 'none':
+            default:
+                return text;
+        }
+    }
+
+    /**
      * 清除翻译缓存
      */
     clearCache() {
@@ -333,6 +452,33 @@ class TranslationService {
     setPromptTemplate(template) {
         this.settings.promptTemplate = template;
         Logger.info('已设置自定义提示模板');
+    }
+
+    /**
+     * 设置是否对英文进行标准化处理
+     * @param {boolean} standardize - 是否标准化
+     */
+    setStandardizeEnglish(standardize) {
+        this.settings.standardizeEnglish = standardize;
+        Logger.info(`已${standardize ? '启用' : '禁用'}英文标准化处理`);
+    }
+
+    /**
+     * 设置命名风格
+     * @param {string} style - 命名风格
+     */
+    setNamingStyle(style) {
+        this.settings.namingStyle = style;
+        Logger.info(`已设置命名风格: ${style}`);
+    }
+
+    /**
+     * 设置自定义分隔符
+     * @param {string} separator - 分隔符
+     */
+    setCustomSeparator(separator) {
+        this.settings.customSeparator = separator;
+        Logger.info(`已设置自定义分隔符: ${separator}`);
     }
 }
 
