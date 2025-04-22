@@ -175,6 +175,23 @@ class FileProcessor {
     }
 
     /**
+     * 检测文件名是否为中文
+     * @param {string} filename - 文件名
+     * @returns {boolean} 是否为中文文件名
+     * @private
+     */
+    _isChineseFilename(filename) {
+        if (!filename) return false;
+
+        // 中文字符范围
+        const chineseRegex = /[\u4e00-\u9fa5]/g;
+        const chineseChars = filename.match(chineseRegex) || [];
+
+        // 如果中文字符占比超过40%，认为是中文文件名
+        return chineseChars.length / filename.length > 0.4;
+    }
+
+    /**
      * 处理文件翻译
      * @param {Array} files - 要处理的文件
      * @param {Function} onFileProcessed - 文件处理完成后的回调函数
@@ -442,38 +459,73 @@ class FileProcessor {
                         }
                     }
 
-                    // 处理标准化名称
-                    if (this.translationService.settings.standardizeEnglish) {
+                    // 检测是否为中文文件名
+                    const isChinese = this._isChineseFilename(file.nameWithoutNumber);
+                    file.isChinese = isChinese;
+
+                    if (isChinese) {
+                        Logger.info(`检测到中文文件名: ${file.nameWithoutNumber}`);
+
+                        // 保存原始中文名
+                        file.originalChineseName = file.nameWithoutNumber;
+
                         try {
-                            // 生成标准化的英文描述
-                            file.standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
-                            Logger.debug(`文件 "${file.name}" 标准化结果: "${file.standardizedName}"`);
+                            // 反向翻译为英文，用于分类匹配和标准化
+                            const englishName = await this.translationService.reverseTranslate(file.nameWithoutNumber);
+                            file.reversedEnglishName = englishName;
+                            Logger.debug(`中文文件名反向翻译结果: ${englishName}`);
+
+                            // 对于中文文件名，使用反向翻译的英文名作为标准化名称
+                            file.standardizedName = englishName;
+
+                            // 使用原始中文名作为翻译结果
+                            file.translatedName = file.originalChineseName;
+
+                            // 去除翻译结果中的多余空格
+                            if (file.translatedName) {
+                                file.translatedName = file.translatedName.replace(/\s+/g, '').trim();
+                            }
+
+                            Logger.debug(`中文文件名处理结果: 原始名="${file.nameWithoutNumber}", 英文名="${file.standardizedName}", 翻译名="${file.translatedName}"`);
                         } catch (error) {
-                            Logger.error(`文件 "${file.name}" 标准化失败`, error);
-                            // 如果标准化失败，使用原始文件名
+                            Logger.error(`中文文件名处理失败: ${file.nameWithoutNumber}`, error);
                             file.standardizedName = file.nameWithoutNumber;
+                            file.translatedName = file.nameWithoutNumber;
                         }
                     } else {
-                        // 如果没有启用标准化，使用原始文件名
-                        file.standardizedName = file.nameWithoutNumber;
-                    }
-
-                    // 直接使用翻译服务处理FXname_zh，不使用CSV匹配
-                    try {
-                        // 只翻译不带序号的部分
-                        file.translatedName = await this.translationService.translate(file.nameWithoutNumber);
-
-                        // 去除翻译结果中的多余空格
-                        if (file.translatedName) {
-                            // 将多个连续空格替换为单个空格，然后去除首尾空格
-                            file.translatedName = file.translatedName.replace(/\s+/g, ' ').trim();
+                        // 处理标准化名称
+                        if (this.translationService.settings.standardizeEnglish) {
+                            try {
+                                // 生成标准化的英文描述
+                                file.standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
+                                Logger.debug(`文件 "${file.name}" 标准化结果: "${file.standardizedName}"`);
+                            } catch (error) {
+                                Logger.error(`文件 "${file.name}" 标准化失败`, error);
+                                // 如果标准化失败，使用原始文件名
+                                file.standardizedName = file.nameWithoutNumber;
+                            }
+                        } else {
+                            // 如果没有启用标准化，使用原始文件名
+                            file.standardizedName = file.nameWithoutNumber;
                         }
 
-                        Logger.debug(`文件 "${file.name}" 翻译结果(FXname_zh): "${file.translatedName}"`);
-                    } catch (translateError) {
-                        Logger.error(`文件 "${file.name}" 翻译失败`, translateError);
-                        // 如果翻译失败，使用原始文件名
-                        file.translatedName = file.nameWithoutNumber;
+                        // 直接使用翻译服务处理FXname_zh，不使用CSV匹配
+                        try {
+                            // 只翻译不带序号的部分
+                            file.translatedName = await this.translationService.translate(file.nameWithoutNumber);
+
+                            // 去除翻译结果中的多余空格
+                            if (file.translatedName) {
+                                // 将多个连续空格替换为单个空格，然后去除首尾空格
+                                file.translatedName = file.translatedName.replace(/\s+/g, ' ').trim();
+                            }
+
+                            Logger.debug(`文件 "${file.name}" 翻译结果(FXname_zh): "${file.translatedName}"`);
+                        } catch (translateError) {
+                            Logger.error(`文件 "${file.name}" 翻译失败`, translateError);
+                            // 如果翻译失败，使用原始文件名
+                            file.translatedName = file.nameWithoutNumber;
+                        }
                     }
 
                     // 应用命名规则

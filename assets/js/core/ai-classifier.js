@@ -26,10 +26,17 @@ class AIClassifier {
      * 获取音效文件的分类信息
      * @param {string} filename - 音效文件名
      * @param {Object} translationProvider - 翻译服务提供者
+     * @param {boolean} [isChinese=false] - 是否为中文文件名
      * @returns {Promise<Object>} 分类信息
      */
-    async getClassification(filename, translationProvider) {
-        console.log('AI分类器尝试获取分类信息:', filename, '启用状态:', this.enabled);
+    async getClassification(filename, translationProvider, isChinese = false) {
+        // 检测是否为中文文件名
+        if (!isChinese) {
+            const chineseRegex = /[\u4e00-\u9fa5]/;
+            isChinese = chineseRegex.test(filename);
+        }
+
+        console.log('AI分类器尝试获取分类信息:', filename, '启用状态:', this.enabled, '是否中文:', isChinese ? '是' : '否');
 
         if (!this.enabled) {
             console.log('AI分类器未启用，跳过分类');
@@ -49,6 +56,7 @@ class AIClassifier {
             this.batchQueue.push({
                 filename,
                 translationProvider,
+                isChinese,
                 resolve,
                 reject
             });
@@ -87,9 +95,13 @@ class AIClassifier {
             files: currentBatch.map(item => item.filename)
         });
 
+        // 检查是否有中文文件名
+        const hasChineseFiles = currentBatch.some(item => item.isChinese);
+        console.log('批次中是否包含中文文件名:', hasChineseFiles ? '是' : '否');
+
         try {
-            // 构建批量请求
-            const batchPrompt = this.buildBatchPrompt(currentBatch.map(item => item.filename));
+            // 构建批量请求，指定是否为中文文件名
+            const batchPrompt = this.buildBatchPrompt(currentBatch.map(item => item.filename), hasChineseFiles);
 
             // 使用第一个请求的翻译提供者
             const translationProvider = currentBatch[0].translationProvider;
@@ -97,7 +109,8 @@ class AIClassifier {
             // 发送请求
             console.log('发送AI分类请求', {
                 provider: translationProvider && typeof translationProvider.getId === 'function' ? translationProvider.getId() : 'unknown',
-                fileCount: currentBatch.length
+                fileCount: currentBatch.length,
+                isChinese: hasChineseFiles
             });
 
             const result = await this.queryAI(batchPrompt, translationProvider);
@@ -110,9 +123,17 @@ class AIClassifier {
             console.log('解析后的分类结果', classifications);
 
             // 处理每个文件的结果
-            currentBatch.forEach((item, index) => {
+            currentBatch.forEach(item => {
                 const classification = classifications[item.filename] || null;
                 console.log(`文件 ${item.filename} 的分类结果:`, classification);
+
+                // 如果是中文文件名且有英文描述，添加到分类信息中
+                if (item.isChinese && classification && hasChineseFiles) {
+                    // 确保英文描述字段存在
+                    if (classification.englishDescription) {
+                        console.log(`中文文件 ${item.filename} 获取到英文描述: ${classification.englishDescription}`);
+                    }
+                }
 
                 // 缓存结果
                 if (classification) {
@@ -141,10 +162,61 @@ class AIClassifier {
     /**
      * 构建批量请求的提示词
      * @param {Array<string>} filenames - 文件名数组
+     * @param {boolean} [isChinese=false] - 是否为中文文件名
      * @returns {string} 提示词
      */
-    buildBatchPrompt(filenames) {
-        return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下音效文件名，分析并提供每个文件的分类信息。
+    buildBatchPrompt(filenames, isChinese = false) {
+        // 检测文件名是否为中文
+        if (!isChinese) {
+            // 检查第一个文件名是否包含中文字符
+            const chineseRegex = /[\u4e00-\u9fa5]/;
+            if (filenames.length > 0 && chineseRegex.test(filenames[0])) {
+                isChinese = true;
+            }
+        }
+
+        // 如果是中文文件名，使用中文提示词
+        if (isChinese) {
+            return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下中文音效文件名，分析并提供每个文件的分类信息。
+
+重要：你必须严格使用以下有效的分类ID(CatID)，不要创造新的分类ID：
+- 对于故障/毁损/噪音类型的音效，应使用DSGNRythm（设计音/节奏性）作为CatID
+- 对于科幻类型的音效，应使用SCIMisc（科幻/其他）或其他SCI前缀的分类
+- 对于数字/电子类型的音效，应使用DSGNSynth（设计音/电子合成）或UIGlitch（用户界面/故障）
+
+请使用以下格式返回结果（JSON格式）：
+
+{
+  "results": [
+    {
+      "filename": "文件名",
+      "classification": {
+        "catID": "分类ID，必须是UCS标准表格中存在的ID，如DSGNRythm、SCIMisc、TOONPop等",
+        "catShort": "短分类名，如DSGN、SCI、TOON等",
+        "category": "主分类英文名，如DESIGNED、SCIENCE FICTION、CARTOON等",
+        "category_zh": "主分类中文名，如声音设计、科幻、卡通等",
+        "subCategory": "子分类英文名，如RHYTHMIC、MISC、POP等",
+        "subCategory_zh": "子分类中文名，如节奏性、其他、爆破等",
+        "englishDescription": "简短英文描述，不超过5个单词"
+      }
+    }
+  ]
+}
+
+请分析以下中文音效文件名：
+${filenames.join('\n')}
+
+注意：
+1. 请只返回JSON格式的结果，不要包含其他解释文字
+2. 如果无法确定某个分类信息，可以将对应字段设为null
+3. 你必须使用UCS标准表格中存在的有效分类ID(CatID)，不要创造新的分类ID
+4. 对于故障/毁损/噪音类型的音效，应使用DSGNRythm作为CatID
+5. 对于科幻类型的音效，应使用SCIMisc或其他SCI前缀的分类
+6. 对于数字/电子类型的音效，应使用DSGNSynth或UIGlitch
+7. 请同时提供简短英文描述，便于生成英文标准化名称`;
+        } else {
+            // 英文文件名使用原有提示词
+            return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下音效文件名，分析并提供每个文件的分类信息。
 
 重要：你必须严格使用以下有效的分类ID(CatID)，不要创造新的分类ID：
 - 对于Glitch类型的音效，应使用DSGNRythm（设计音/节奏性）作为CatID
@@ -158,7 +230,7 @@ class AIClassifier {
     {
       "filename": "文件名",
       "classification": {
-        "catID": "分类ID，必须是CSV表格中存在的ID，如DSGNRythm、SCIMisc、TOONPop等",
+        "catID": "分类ID，必须是UCS标准表格中存在的ID，如DSGNRythm、SCIMisc、TOONPop等",
         "catShort": "短分类名，如DSGN、SCI、TOON等",
         "category": "主分类英文名，如DESIGNED、SCIENCE FICTION、CARTOON等",
         "category_zh": "主分类中文名，如声音设计、科幻、卡通等",
@@ -175,10 +247,11 @@ ${filenames.join('\n')}
 注意：
 1. 请只返回JSON格式的结果，不要包含其他解释文字
 2. 如果无法确定某个分类信息，可以将对应字段设为null
-3. 你必须使用CSV表格中存在的有效分类ID(CatID)，不要创造新的分类ID
+3. 你必须使用是UCS标准表格中存在的有效分类ID(CatID)，不要创造新的分类ID
 4. 对于Glitch类型的音效，应使用DSGNRythm作为CatID
 5. 对于科幻类型的音效，应使用SCIMisc或其他SCI前缀的分类
 6. 对于数字/电子类型的音效，应使用DSGNSynth或UIGlitch`;
+        }
     }
 
     /**
@@ -274,7 +347,14 @@ ${filenames.join('\n')}
                 data.results.forEach(item => {
                     if (item.filename && item.classification) {
                         // 直接使用分类信息，不进行验证
-                        result[item.filename] = item.classification;
+                        const classification = item.classification;
+
+                        // 如果有英文描述字段，保留它
+                        if (classification.englishDescription) {
+                            console.log(`文件 ${item.filename} 包含英文描述: ${classification.englishDescription}`);
+                        }
+
+                        result[item.filename] = classification;
                     }
                 });
             }

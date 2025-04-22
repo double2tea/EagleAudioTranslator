@@ -159,17 +159,21 @@ class TranslationService {
     /**
      * 翻译文本
      * @param {string} text - 要翻译的文本
+     * @param {string} [from] - 源语言，可选，默认使用设置中的源语言
+     * @param {string} [to] - 目标语言，可选，默认使用设置中的目标语言
      * @returns {Promise<string>} 翻译结果
      */
-    async translate(text) {
+    async translate(text, from = null, to = null) {
         if (!this.activeProvider) {
             throw new Error('未设置活动翻译提供者');
         }
 
-        // 移除所有特殊处理逻辑，统一使用翻译接口
+        // 使用提供的语言参数或默认设置
+        const sourceLanguage = from || this.settings.sourceLanguage;
+        const targetLanguage = to || this.settings.targetLanguage;
 
         // 检查缓存
-        const cacheKey = `${this.activeProvider.getId()}:${this.settings.sourceLanguage}:${this.settings.targetLanguage}:${text}`;
+        const cacheKey = `${this.activeProvider.getId()}:${sourceLanguage}:${targetLanguage}:${text}`;
         if (this.settings.useCache) {
             const cached = this.cache.get(cacheKey);
             if (cached) {
@@ -182,8 +186,8 @@ class TranslationService {
         try {
             const result = await this.activeProvider.translate(
                 text,
-                this.settings.sourceLanguage,
-                this.settings.targetLanguage
+                sourceLanguage,
+                targetLanguage
             );
 
             // 更新缓存
@@ -194,6 +198,40 @@ class TranslationService {
             return result;
         } catch (error) {
             Logger.error(`翻译失败: ${text}`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 反向翻译（中文到英文）
+     * @param {string} text - 要翻译的中文文本
+     * @returns {Promise<string>} 翻译结果（英文）
+     */
+    async reverseTranslate(text) {
+        try {
+            Logger.debug(`反向翻译（中文到英文）: ${text}`);
+
+            // 检查缓存
+            const cacheKey = `reverse:${this.activeProvider.getId()}:zh-CN:en:${text}`;
+            if (this.settings.useCache) {
+                const cached = this.cache.get(cacheKey);
+                if (cached) {
+                    Logger.debug(`使用缓存的反向翻译结果: ${text} -> ${cached}`);
+                    return cached;
+                }
+            }
+
+            // 执行翻译，将源语言设置为中文，目标语言设置为英文
+            const result = await this.translate(text, 'zh-CN', 'en');
+
+            // 更新缓存
+            if (this.settings.useCache) {
+                this.cache.set(cacheKey, result);
+            }
+
+            return result;
+        } catch (error) {
+            Logger.error(`反向翻译失败: ${text}`, error);
             throw error;
         }
     }
