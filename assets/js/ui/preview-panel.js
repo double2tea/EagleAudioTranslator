@@ -97,6 +97,8 @@ class PreviewPanel {
             row.innerHTML = `
                 <td><input type="checkbox" class="file-select-checkbox" ${file.selected ? 'checked' : ''}></td>
                 <td title="${file.originalName}">${file.originalName}</td>
+                <td class="cat-id">${file.catID || '等待分类...'}</td>
+                <td class="fx-name">${file.standardizedName || file.nameWithoutNumber || '等待翻译...'}</td>
                 <td class="translation-result">${file.translatedName || '等待翻译...'}</td>
                 <td class="final-name">${file.formattedName || '等待生成...'}</td>
                 <td class="status-cell">
@@ -145,7 +147,19 @@ class PreviewPanel {
 
         const row = rows[index];
 
-        // 更新翻译结果
+        // 更新CatID
+        const catIdCell = row.querySelector('.cat-id');
+        if (catIdCell) {
+            catIdCell.textContent = file.catID || '等待分类...';
+        }
+
+        // 更新英文描述(FXName)
+        const fxNameCell = row.querySelector('.fx-name');
+        if (fxNameCell) {
+            fxNameCell.textContent = file.standardizedName || file.nameWithoutNumber || '';
+        }
+
+        // 更新中文描述(FXName_zh)
         const translationCell = row.querySelector('.translation-result');
         if (translationCell) {
             translationCell.textContent = file.translatedName || '';

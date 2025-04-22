@@ -213,6 +213,9 @@
                                         <option value="audio">音效专用</option>
                                         <option value="custom">自定义提示</option>
                                     </select>
+                                    <button id="viewPromptBtn" class="btn btn-sm btn-info" style="margin-left: 10px;">
+                                        <i class="fas fa-eye"></i> 查看提示词
+                                    </button>
                                 </div>
 
                                 <div id="customPromptContainer" class="setting-item" style="display:none;">
@@ -248,6 +251,9 @@
                                         <option value="audio">音效专用</option>
                                         <option value="custom">自定义提示</option>
                                     </select>
+                                    <button id="viewPromptBtn" class="btn btn-sm btn-info" style="margin-left: 10px;">
+                                        <i class="fas fa-eye"></i> 查看提示词
+                                    </button>
                                 </div>
 
                                 <div id="customPromptContainer" class="setting-item" style="display:none;">
@@ -291,6 +297,9 @@
                                         <option value="audio">音效专用</option>
                                         <option value="custom">自定义提示</option>
                                     </select>
+                                    <button id="viewPromptBtn" class="btn btn-sm btn-info" style="margin-left: 10px;">
+                                        <i class="fas fa-eye"></i> 查看提示词
+                                    </button>
                                 </div>
 
                                 <div id="customPromptContainer" class="setting-item" style="display:none;">
@@ -454,8 +463,10 @@
                         <thead>
                             <tr>
                                 <th width="5%"><input type="checkbox" id="selectAllFiles" checked></th>
-                                <th width="25%">原文件名</th>
-                                <th width="30%">翻译结果</th>
+                                <th width="15%">原文件名</th>
+                                <th width="10%">CatID</th>
+                                <th width="15%">英文描述(FXName)</th>
+                                <th width="15%">中文描述(FXName_zh)</th>
                                 <th width="30%">最终文件名</th>
                                 <th width="10%">状态</th>
                             </tr>
@@ -486,6 +497,26 @@
 
         <!-- 状态提示 -->
         <div id="statusMessage" class="status-message"></div>
+
+        <!-- 提示词预览对话框 -->
+        <div id="promptPreviewModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>当前提示词内容</h3>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="prompt-section">
+                        <h4>翻译提示词</h4>
+                        <pre id="translationPromptPreview" class="prompt-preview"></pre>
+                    </div>
+                    <div class="prompt-section">
+                        <h4>标准化提示词</h4>
+                        <pre id="standardizePromptPreview" class="prompt-preview"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 错误处理脚本 -->
@@ -538,6 +569,7 @@
 
     <!-- 核心功能 -->
     <script src="./assets/js/core/translation/provider-interface.js"></script>
+    <script src="./assets/js/core/translation/prompt-templates.js"></script>
     <script src="./assets/js/core/translation/providers/google-provider.js"></script>
     <script src="./assets/js/core/translation/providers/libre-provider.js"></script>
     <script src="./assets/js/core/translation/providers/openrouter-provider.js"></script>

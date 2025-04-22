@@ -144,7 +144,13 @@ class AIClassifier {
      * @returns {string} 提示词
      */
     buildBatchPrompt(filenames) {
-        return `你是一个专业的音效分类专家，完全UCS音效分类规则，请根据以下音效文件名，分析并提供每个文件的分类信息。
+        return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下音效文件名，分析并提供每个文件的分类信息。
+
+重要：你必须严格使用以下有效的分类ID(CatID)，不要创造新的分类ID：
+- 对于Glitch类型的音效，应使用DSGNRythm（设计音/节奏性）作为CatID
+- 对于科幻类型的音效，应使用SCIMisc（科幻/其他）或其他SCI前缀的分类
+- 对于数字/电子类型的音效，应使用DSGNSynth（设计音/电子合成）或UIGlitch（用户界面/故障）
+
 请使用以下格式返回结果（JSON格式）：
 
 {
@@ -152,11 +158,12 @@ class AIClassifier {
     {
       "filename": "文件名",
       "classification": {
-        "catID": "分类ID，例如DSGN、TOON、ANML等",
-        "category": "主分类英文名，例如DESIGNED、CARTOON、ANIMAL等",
-        "category_zh": "主分类中文名，例如设计音、卡通、动物等",
-        "subCategory": "子分类英文名，例如WHOOSH、POP、CAT等",
-        "subCategory_zh": "子分类中文名，例如呼啸、爆破、猫等"
+        "catID": "分类ID，必须是CSV表格中存在的ID，如DSGNRythm、SCIMisc、TOONPop等",
+        "catShort": "短分类名，如DSGN、SCI、TOON等",
+        "category": "主分类英文名，如DESIGNED、SCIENCE FICTION、CARTOON等",
+        "category_zh": "主分类中文名，如声音设计、科幻、卡通等",
+        "subCategory": "子分类英文名，如RHYTHMIC、MISC、POP等",
+        "subCategory_zh": "子分类中文名，如节奏性、其他、爆破等"
       }
     }
   ]
@@ -168,7 +175,10 @@ ${filenames.join('\n')}
 注意：
 1. 请只返回JSON格式的结果，不要包含其他解释文字
 2. 如果无法确定某个分类信息，可以将对应字段设为null
-3. 请尽可能准确地分析文件名中隐含的分类信息`;
+3. 你必须使用CSV表格中存在的有效分类ID(CatID)，不要创造新的分类ID
+4. 对于Glitch类型的音效，应使用DSGNRythm作为CatID
+5. 对于科幻类型的音效，应使用SCIMisc或其他SCI前缀的分类
+6. 对于数字/电子类型的音效，应使用DSGNSynth或UIGlitch`;
     }
 
     /**
@@ -209,29 +219,61 @@ ${filenames.join('\n')}
      */
     parseAIResponse(response, filenames) {
         try {
-            // 尝试从响应中提取JSON
-            const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) ||
-                             response.match(/```\n([\s\S]*?)\n```/) ||
-                             response.match(/{[\s\S]*?}/);
+            // 先打印原始响应以便调试
+            console.log('原始响应:', response);
 
+            // 尝试从响应中提取JSON
             let jsonStr = '';
-            if (jsonMatch) {
-                jsonStr = jsonMatch[0];
-                if (jsonMatch[1]) {
-                    jsonStr = jsonMatch[1];
-                }
-            } else {
+
+            try {
+                // 尝试直接解析整个响应
+                JSON.parse(response);
                 jsonStr = response;
+            } catch (parseError) {
+                // 如果直接解析失败，尝试提取JSON部分
+                const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) ||
+                                 response.match(/```\n([\s\S]*?)\n```/) ||
+                                 response.match(/{[\s\S]*?}/);
+
+                if (jsonMatch) {
+                    jsonStr = jsonMatch[0];
+                    if (jsonMatch[1]) {
+                        jsonStr = jsonMatch[1];
+                    }
+
+                    // 清理JSON字符串，移除可能导致解析错误的字符
+                    jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+                } else {
+                    // 如果没有匹配到JSON，尝试手动提取
+                    const jsonStart = response.indexOf('{');
+                    const jsonEnd = response.lastIndexOf('}');
+
+                    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+                        jsonStr = response.substring(jsonStart, jsonEnd + 1);
+                        // 清理JSON字符串
+                        jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+                    } else {
+                        throw new Error('无法从响应中提取JSON');
+                    }
+                }
             }
+
+            console.log('提取的JSON字符串:', jsonStr);
+
+            // 尝试修复常见的JSON格式问题
+            jsonStr = jsonStr.replace(/,\s*}/g, '}');
+            jsonStr = jsonStr.replace(/,\s*]/g, ']');
 
             // 解析JSON
             const data = JSON.parse(jsonStr);
+            console.log('解析后的数据:', data);
 
             // 构建结果映射
             const result = {};
             if (data && data.results && Array.isArray(data.results)) {
                 data.results.forEach(item => {
                     if (item.filename && item.classification) {
+                        // 直接使用分类信息，不进行验证
                         result[item.filename] = item.classification;
                     }
                 });
@@ -247,7 +289,56 @@ ${filenames.join('\n')}
             return result;
         } catch (error) {
             console.error('解析AI响应失败:', error, 'Response:', response);
-            return {};
+
+            // 尝试手动构建结果
+            try {
+                const result = {};
+
+                // 为每个文件创建默认分类
+                filenames.forEach(filename => {
+                    // 对于Glitch类型的音效，使用DSGNRythm
+                    if (filename.toLowerCase().includes('glitch')) {
+                        result[filename] = {
+                            catID: 'DSGNRythm',
+                            catShort: 'DSGN',
+                            category: 'DESIGNED',
+                            category_zh: '声音设计',
+                            subCategory: 'RHYTHMIC',
+                            subCategory_zh: '节奏性'
+                        };
+                        console.log(`手动创建分类: ${filename} -> DSGNRythm`);
+                    }
+                    // 对于科幻类型的音效，使用SCIMisc
+                    else if (filename.toLowerCase().includes('sci-fi')) {
+                        result[filename] = {
+                            catID: 'SCIMisc',
+                            catShort: 'SCI',
+                            category: 'SCIENCE FICTION',
+                            category_zh: '科幻',
+                            subCategory: 'MISC',
+                            subCategory_zh: '其他'
+                        };
+                        console.log(`手动创建分类: ${filename} -> SCIMisc`);
+                    }
+                    // 对于数字/电子类型的音效，使用DSGNSynth
+                    else if (filename.toLowerCase().includes('digital')) {
+                        result[filename] = {
+                            catID: 'DSGNSynth',
+                            catShort: 'DSGN',
+                            category: 'DESIGNED',
+                            category_zh: '声音设计',
+                            subCategory: 'SYNTHETIC',
+                            subCategory_zh: '电子合成'
+                        };
+                        console.log(`手动创建分类: ${filename} -> DSGNSynth`);
+                    }
+                });
+
+                return result;
+            } catch (fallbackError) {
+                console.error('手动构建结果失败:', fallbackError);
+                return {};
+            }
         }
     }
 

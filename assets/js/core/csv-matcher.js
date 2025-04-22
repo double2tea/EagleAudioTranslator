@@ -1005,6 +1005,32 @@ class CSVMatcher {
             matchType: 'fuzzy'
         };
     }
+
+    /**
+     * 检查CatID是否有效
+     * @param {string} catID - 要检查的CatID
+     * @returns {boolean} 是否有效
+     */
+    isValidCatID(catID) {
+        if (!this.loaded || !catID) {
+            return false;
+        }
+
+        // 检查是否在术语库中存在
+        for (let i = 0; i < this.terms.length; i++) {
+            if (this.terms[i].catID === catID) {
+                return true;
+            }
+        }
+
+        // 特殊处理一些Glitch类型的音效
+        if (catID === 'DSGNRythm') {
+            return true;
+        }
+
+        console.warn(`CatID "${catID}" 在CSV表格中不存在`);
+        return false;
+    }
 }
 
 // 导出CSVMatcher

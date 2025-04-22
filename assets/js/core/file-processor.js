@@ -353,6 +353,47 @@ class FileProcessor {
                                 console.log(`文件 "${file.name}" 使用AI辅助分类匹配结果:`, aiClassification);
                                 Logger.debug(`文件 "${file.name}" 使用AI辅助分类匹配结果:`, aiClassification);
 
+                                // 验证AI返回的分类信息
+                                if (aiClassification.catID) {
+                                    // 检查CatID是否在CSV表格中存在
+                                    const validCatID = this.csvMatcher.isValidCatID(aiClassification.catID);
+
+                                    if (!validCatID) {
+                                        console.warn(`文件 "${file.name}" 的AI分类结果中的CatID "${aiClassification.catID}" 不在CSV表格中，将尝试使用其他匹配方式`);
+
+                                        // 对于Glitch类型的音效，使用DSGNRythm
+                                        if (file.name.toLowerCase().includes('glitch')) {
+                                            aiClassification.catID = 'DSGNRythm';
+                                            aiClassification.catShort = 'DSGN';
+                                            aiClassification.category = 'DESIGNED';
+                                            aiClassification.category_zh = '声音设计';
+                                            aiClassification.subCategory = 'RHYTHMIC';
+                                            aiClassification.subCategory_zh = '节奏性';
+                                            console.log('检测到Glitch类型音效，已将CatID设置为DSGNRythm');
+                                        }
+                                        // 对于科幻类型的音效，使用SCIMisc
+                                        else if (file.name.toLowerCase().includes('sci-fi')) {
+                                            aiClassification.catID = 'SCIMisc';
+                                            aiClassification.catShort = 'SCI';
+                                            aiClassification.category = 'SCIENCE FICTION';
+                                            aiClassification.category_zh = '科幻';
+                                            aiClassification.subCategory = 'MISC';
+                                            aiClassification.subCategory_zh = '其他';
+                                            console.log('检测到科幻类型音效，已将CatID设置为SCIMisc');
+                                        }
+                                        // 对于数字/电子类型的音效，使用DSGNSynth
+                                        else if (file.name.toLowerCase().includes('digital')) {
+                                            aiClassification.catID = 'DSGNSynth';
+                                            aiClassification.catShort = 'DSGN';
+                                            aiClassification.category = 'DESIGNED';
+                                            aiClassification.category_zh = '声音设计';
+                                            aiClassification.subCategory = 'SYNTHETIC';
+                                            aiClassification.subCategory_zh = '电子合成';
+                                            console.log('检测到数字/电子类型音效，已将CatID设置为DSGNSynth');
+                                        }
+                                    }
+                                }
+
                                 // 使用AI返回的分类信息创建一个类似于术语的对象
                                 fileCategory = {
                                     catID: aiClassification.catID,
@@ -416,25 +457,15 @@ class FileProcessor {
                         file.standardizedName = file.nameWithoutNumber;
                     }
 
-                    // 通用翻译处理
-                    // 先尝试CSV匹配
-                    let matchedTranslation = null;
-                    if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded) {
-                        // 使用不带序号的文件名进行匹配
-                        const match = this.csvMatcher.findMatch(file.nameWithoutNumber);
-                        if (match) {
-                            matchedTranslation = match.target;
-                            Logger.debug(`文件 "${file.name}" 使用CSV匹配翻译结果: "${matchedTranslation}"`);
-                        }
-                    }
-
-                    // 如果CSV没有匹配结果，使用翻译服务
-                    if (!matchedTranslation) {
+                    // 直接使用翻译服务处理FXname_zh，不使用CSV匹配
+                    try {
                         // 只翻译不带序号的部分
                         file.translatedName = await this.translationService.translate(file.nameWithoutNumber);
-                        Logger.debug(`文件 "${file.name}" 使用翻译服务结果: "${file.translatedName}"`);
-                    } else {
-                        file.translatedName = matchedTranslation;
+                        Logger.debug(`文件 "${file.name}" 翻译结果(FXname_zh): "${file.translatedName}"`);
+                    } catch (translateError) {
+                        Logger.error(`文件 "${file.name}" 翻译失败`, translateError);
+                        // 如果翻译失败，使用原始文件名
+                        file.translatedName = file.nameWithoutNumber;
                     }
 
                     // 应用命名规则

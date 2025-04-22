@@ -12,11 +12,8 @@ class DeepseekProvider extends TranslationProvider {
         this.endpoint = 'https://api.deepseek.com/v1/chat/completions';
         this.defaultModel = 'deepseek-chat'; // 仅支持deepseek-chat模型
 
-        // 默认翻译提示模板
-        this.defaultPromptTemplate = '请将以下{from}文本翻译成{to}，保持原意，不要添加任何解释，直接返回翻译结果\n\n{text}';
-
-        // 默认标准化提示模板
-        this.defaultStandardizeTemplate = 'Please provide a concise English description of this sound effect in 2-5 words. Only return the description without any additional text or explanation.\n\n{text}';
+        // 创建提示词管理实例
+        this.promptTemplates = new PromptTemplates();
     }
 
     /**
@@ -85,44 +82,14 @@ class DeepseekProvider extends TranslationProvider {
             // 仅使用deepseek-chat模型
             const model = 'deepseek-chat';
 
-            // 构建提示
-            let prompt = '';
-
-            // 如果有自定义提示模板，使用自定义提示模板
-            if (this.settings.promptTemplate && this.settings.promptTemplate.trim()) {
-                prompt = this.settings.promptTemplate
-                    .replace(/{text}/g, text)
-                    .replace(/{from}/g, this._getLanguageName(from))
-                    .replace(/{to}/g, this._getLanguageName(to));
-            }
-            // 如果有自定义提示ID，使用自定义提示ID
-            else if (this.settings.customPrompt && this.settings.customPrompt.trim()) {
-                // 这里可以根据提示ID加载预定义的提示模板
-                const promptId = this.settings.customPrompt.trim();
-                const predefinedPrompts = {
-                    'accurate': '请将以下{from}文本翻译成{to}，要求翻译准确、专业，保持原意，不要添加任何解释。直接返回翻译结果\n\n{text}',
-                    'natural': '请将以下{from}文本翻译成自然、流畅的{to}，保持原意的同时让表达更加地道。直接返回翻译结果\n\n{text}',
-                    'creative': '请将以下{from}文本翻译成有创意的{to}，可以适当调整表达方式使其更加生动。直接返回翻译结果\n\n{text}',
-                    'audio': '请将以下音效文件名从{from}翻译成{to}，保持原意，使用简洁、准确的表达。直接返回翻译结果\n\n{text}'
-                };
-
-                const promptTemplate = predefinedPrompts[promptId] || this.defaultPromptTemplate;
-                prompt = promptTemplate
-                    .replace(/{text}/g, text)
-                    .replace(/{from}/g, this._getLanguageName(from))
-                    .replace(/{to}/g, this._getLanguageName(to));
-            } else {
-                // 使用默认提示模板
-                prompt = this.defaultPromptTemplate
-                    .replace(/{text}/g, text)
-                    .replace(/{from}/g, from === 'auto' ? '' : this._getLanguageName(from))
-                    .replace(/{to}/g, this._getLanguageName(to));
-
-                // 如果是自动检测，移除多余的空格
-                if (from === 'auto') {
-                    prompt = prompt.replace(/以下\\s+文本/g, '以下文本');
-                }
-            }
+            // 使用提示词管理模块获取提示词
+            const prompt = this.promptTemplates.getTranslationPrompt(
+                this.settings.customPrompt,
+                text,
+                from,
+                to,
+                this.settings.promptTemplate
+            );
 
             // 构建请求体
             const requestBody = {
@@ -223,8 +190,8 @@ class DeepseekProvider extends TranslationProvider {
             // 仅使用deepseek-chat模型
             const model = 'deepseek-chat';
 
-            // 构建提示
-            const prompt = this.defaultStandardizeTemplate.replace(/{text}/g, text);
+            // 使用提示词管理模块获取标准化提示词
+            const prompt = this.promptTemplates.getStandardizePrompt(text);
 
             // 构建请求体
             const requestBody = {
@@ -284,31 +251,7 @@ class DeepseekProvider extends TranslationProvider {
         }
     }
 
-    /**
-     * 获取语言名称
-     * @param {string} code - 语言代码
-     * @returns {string} 语言名称
-     * @private
-     */
-    _getLanguageName(code) {
-        const languageMap = {
-            'auto': '自动检测',
-            'en': '英语',
-            'zh': '中文',
-            'zh-CN': '简体中文',
-            'zh-TW': '繁体中文',
-            'fr': '法语',
-            'de': '德语',
-            'it': '意大利语',
-            'ja': '日语',
-            'ko': '韩语',
-            'pt': '葡萄牙语',
-            'ru': '俄语',
-            'es': '西班牙语'
-        };
-
-        return languageMap[code] || code;
-    }
+    // _getLanguageName方法已移至PromptTemplates类中
 }
 
 // 导出DeepseekProvider

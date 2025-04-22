@@ -166,26 +166,7 @@ class TranslationService {
             throw new Error('未设置活动翻译提供者');
         }
 
-        // 特殊处理Synthetic Pop、Small Pop和Slap Pop
-        const lowerText = text.toLowerCase();
-        if (lowerText.includes('pop')) {
-            if (lowerText.includes('synthetic pop')) {
-                Logger.debug(`特殊处理Synthetic Pop: ${text} -> 电子合成`);
-                return '电子合成';
-            } else if (lowerText.includes('small pop')) {
-                Logger.debug(`特殊处理Small Pop: ${text} -> 小型爆破`);
-                return '小型爆破';
-            } else if (lowerText.includes('slap pop')) {
-                Logger.debug(`特殊处理Slap Pop: ${text} -> 拍击爆破`);
-                return '拍击爆破';
-            }
-        }
-
-        // 特殊处理分类ID
-        if (lowerText === 'toonpop') {
-            Logger.debug(`特殊处理分类ID: ${text} -> TOONPop`);
-            return 'TOONPop';
-        }
+        // 移除所有特殊处理逻辑，统一使用翻译接口
 
         // 检查缓存
         const cacheKey = `${this.activeProvider.getId()}:${this.settings.sourceLanguage}:${this.settings.targetLanguage}:${text}`;
@@ -484,6 +465,14 @@ class TranslationService {
             return 'unknown';
         }
         return this.activeProvider.getId();
+    }
+
+    /**
+     * 获取当前活动的提供者实例
+     * @returns {TranslationProvider} 提供者实例
+     */
+    getActiveProvider() {
+        return this.activeProvider;
     }
 
     /**
