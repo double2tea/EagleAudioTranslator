@@ -18,7 +18,7 @@ class AIClassifier {
      */
     init(enabled) {
         this.enabled = enabled;
-        console.log('AI辅助分类匹配功能已' + (enabled ? '启用' : '禁用'));
+        console.log('AI辅助分类匹配功能已' + (enabled ? '启用' : '禁用'), '当前状态:', this.enabled);
         return this;
     }
 
@@ -29,15 +29,20 @@ class AIClassifier {
      * @returns {Promise<Object>} 分类信息
      */
     async getClassification(filename, translationProvider) {
+        console.log('AI分类器尝试获取分类信息:', filename, '启用状态:', this.enabled);
+
         if (!this.enabled) {
+            console.log('AI分类器未启用，跳过分类');
             return null;
         }
 
         // 检查缓存
         if (this.cache.has(filename)) {
-            console.log('使用缓存的分类信息:', filename);
+            console.log('使用缓存的分类信息:', filename, this.cache.get(filename));
             return this.cache.get(filename);
         }
+
+        console.log('添加到批处理队列:', filename);
 
         // 创建一个Promise，将其添加到批处理队列
         return new Promise((resolve, reject) => {
@@ -67,37 +72,53 @@ class AIClassifier {
      */
     async processBatch() {
         if (this.batchQueue.length === 0 || this.processingBatch) {
+            console.log('批处理跳过: 队列为空或正在处理中', {
+                queueLength: this.batchQueue.length,
+                processing: this.processingBatch
+            });
             return;
         }
 
         this.processingBatch = true;
-        
+
         // 获取当前批次
         const currentBatch = this.batchQueue.splice(0, this.batchSize);
-        console.log(`处理批次请求，共${currentBatch.length}个文件`);
+        console.log(`处理批次请求，共${currentBatch.length}个文件`, {
+            files: currentBatch.map(item => item.filename)
+        });
 
         try {
             // 构建批量请求
             const batchPrompt = this.buildBatchPrompt(currentBatch.map(item => item.filename));
-            
+
             // 使用第一个请求的翻译提供者
             const translationProvider = currentBatch[0].translationProvider;
-            
+
             // 发送请求
+            console.log('发送AI分类请求', {
+                provider: translationProvider && typeof translationProvider.getId === 'function' ? translationProvider.getId() : 'unknown',
+                fileCount: currentBatch.length
+            });
+
             const result = await this.queryAI(batchPrompt, translationProvider);
-            
+            console.log('AI分类请求返回结果', {
+                resultLength: result ? result.length : 0
+            });
+
             // 解析结果
             const classifications = this.parseAIResponse(result, currentBatch.map(item => item.filename));
-            
+            console.log('解析后的分类结果', classifications);
+
             // 处理每个文件的结果
             currentBatch.forEach((item, index) => {
                 const classification = classifications[item.filename] || null;
-                
+                console.log(`文件 ${item.filename} 的分类结果:`, classification);
+
                 // 缓存结果
                 if (classification) {
                     this.cache.set(item.filename, classification);
                 }
-                
+
                 // 解析Promise
                 item.resolve(classification);
             });
@@ -109,7 +130,7 @@ class AIClassifier {
             });
         } finally {
             this.processingBatch = false;
-            
+
             // 如果队列中还有请求，继续处理
             if (this.batchQueue.length > 0) {
                 setTimeout(() => this.processBatch(), 1000); // 添加延迟，避免频繁请求
@@ -123,7 +144,7 @@ class AIClassifier {
      * @returns {string} 提示词
      */
     buildBatchPrompt(filenames) {
-        return `你是一个专业的音效分类专家，请根据以下音效文件名，分析并提供每个文件的分类信息。
+        return `你是一个专业的音效分类专家，完全UCS音效分类规则，请根据以下音效文件名，分析并提供每个文件的分类信息。
 请使用以下格式返回结果（JSON格式）：
 
 {
@@ -158,6 +179,19 @@ ${filenames.join('\n')}
      */
     async queryAI(prompt, translationProvider) {
         try {
+            // 检查translationProvider是否有sendRequest方法
+            if (!translationProvider || typeof translationProvider.sendRequest !== 'function') {
+                console.error('translationProvider无效或没有sendRequest方法');
+
+                // 如果translationProvider有translate方法，尝试使用translate方法
+                if (translationProvider && typeof translationProvider.translate === 'function') {
+                    console.log('尝试使用translate方法代替sendRequest');
+                    return await translationProvider.translate(prompt, 'auto', 'auto');
+                }
+
+                throw new Error('translationProvider无效或没有可用的方法');
+            }
+
             // 使用现有的翻译服务提供者发送请求
             const response = await translationProvider.sendRequest(prompt, 'auto', 'auto', 'classification');
             return response;
@@ -176,10 +210,10 @@ ${filenames.join('\n')}
     parseAIResponse(response, filenames) {
         try {
             // 尝试从响应中提取JSON
-            const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
-                             response.match(/```\n([\s\S]*?)\n```/) || 
+            const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) ||
+                             response.match(/```\n([\s\S]*?)\n```/) ||
                              response.match(/{[\s\S]*?}/);
-            
+
             let jsonStr = '';
             if (jsonMatch) {
                 jsonStr = jsonMatch[0];
@@ -189,10 +223,10 @@ ${filenames.join('\n')}
             } else {
                 jsonStr = response;
             }
-            
+
             // 解析JSON
             const data = JSON.parse(jsonStr);
-            
+
             // 构建结果映射
             const result = {};
             if (data && data.results && Array.isArray(data.results)) {
@@ -202,14 +236,14 @@ ${filenames.join('\n')}
                     }
                 });
             }
-            
+
             // 检查是否所有文件都有结果
             filenames.forEach(filename => {
                 if (!result[filename]) {
                     console.warn(`未找到文件 ${filename} 的分类信息`);
                 }
             });
-            
+
             return result;
         } catch (error) {
             console.error('解析AI响应失败:', error, 'Response:', response);

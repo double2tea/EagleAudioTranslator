@@ -125,8 +125,9 @@ class CSVMatcher {
         // 查找列索引 - 使用实际的CSV列名
         var sourceIndex = headers.indexOf('SubCategory');
         var targetIndex = headers.indexOf('SubCategory_zh');
-        var categoryIndex = headers.indexOf('CatID');
-        var categoryNameIndex = headers.indexOf('Category');
+        var catIDIndex = headers.indexOf('CatID');
+        var catShortIndex = headers.indexOf('CatShort');
+        var categoryIndex = headers.indexOf('Category');
         var categoryNameZhIndex = headers.indexOf('Category_zh');
         var synonymsIndex = headers.indexOf('Synonyms - Comma Separated');
         var synonymsZhIndex = headers.indexOf('Synonyms_zh');
@@ -134,15 +135,16 @@ class CSVMatcher {
         console.log('解析CSV列索引:', {
             sourceIndex,
             targetIndex,
+            catIDIndex,
+            catShortIndex,
             categoryIndex,
-            categoryNameIndex,
             categoryNameZhIndex,
             synonymsIndex,
             synonymsZhIndex
         });
 
-        if (sourceIndex === -1 || targetIndex === -1 || categoryIndex === -1) {
-            throw new Error('CSV格式错误: 缺少SubCategory、SubCategory_zh或CatID列');
+        if (sourceIndex === -1 || targetIndex === -1 || catIDIndex === -1 || categoryIndex === -1) {
+            throw new Error('CSV格式错误: 缺少SubCategory、SubCategory_zh、CatID或Category列');
         }
 
         var terms = [];
@@ -154,8 +156,9 @@ class CSVMatcher {
             if (values.length >= Math.max(sourceIndex, targetIndex) + 1) {
                 var source = values[sourceIndex].trim();
                 var target = values[targetIndex].trim();
+                var catID = catIDIndex !== -1 ? values[catIDIndex].trim() : '';
+                var catShort = catShortIndex !== -1 ? values[catShortIndex].trim() : '';
                 var category = categoryIndex !== -1 ? values[categoryIndex].trim() : '';
-                var categoryName = categoryNameIndex !== -1 ? values[categoryNameIndex].trim() : '';
                 var categoryNameZh = categoryNameZhIndex !== -1 ? values[categoryNameZhIndex].trim() : '';
                 var synonyms = synonymsIndex !== -1 ? values[synonymsIndex].trim() : '';
                 var synonymsZh = synonymsZhIndex !== -1 ? values[synonymsZhIndex].trim() : '';
@@ -164,8 +167,9 @@ class CSVMatcher {
                     terms.push({
                         source: source,
                         target: target,
+                        catID: catID,
+                        catShort: catShort,
                         category: category,
-                        categoryName: categoryName,
                         categoryNameZh: categoryNameZh,
                         synonyms: synonyms,
                         synonymsZh: synonymsZh
@@ -216,18 +220,22 @@ class CSVMatcher {
      */
     setAIClassifier(enabled) {
         this.matchSettings.useAIClassification = enabled;
+        console.log('设置AI辅助分类器状态:', enabled, 'AIClassifier类是否可用:', !!window.AIClassifier);
 
         // 初始化AI分类器
         if (enabled && window.AIClassifier) {
             if (!this.aiClassifier) {
                 this.aiClassifier = new window.AIClassifier().init(enabled);
-                console.log('AI辅助分类器初始化成功');
+                console.log('AI辅助分类器初始化成功', this.aiClassifier);
             } else {
                 this.aiClassifier.init(enabled);
-                console.log('AI辅助分类器已更新状态');
+                console.log('AI辅助分类器已更新状态', this.aiClassifier);
             }
         } else {
-            console.log('AI辅助分类器已禁用');
+            console.log('AI辅助分类器已禁用或不可用', {
+                enabled: enabled,
+                aiClassifierAvailable: !!window.AIClassifier
+            });
         }
 
         return this;
@@ -704,6 +712,162 @@ class CSVMatcher {
         return this.terms.filter(function(term) {
             return term.category === category;
         });
+    }
+
+    /**
+     * 根据分类和子分类查找术语
+     * @param {string} category - 分类名称
+     * @param {string} subCategory - 子分类名称
+     * @returns {Object|null} 匹配的术语对象
+     */
+    findTermByCategory(category, subCategory) {
+        if (!this.loaded || !this.terms || this.terms.length === 0) {
+            return null;
+        }
+
+        category = category.toUpperCase();
+        subCategory = subCategory.toUpperCase();
+
+        // 先尝试精确匹配分类和子分类
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            if (term.category && term.category.toUpperCase() === category &&
+                term.source && term.source.toUpperCase() === subCategory) {
+                console.log(`精确匹配到分类和子分类: ${category}/${subCategory}`);
+                return term;
+            }
+        }
+
+        // 如果没有找到精确匹配，尝试只匹配分类
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            if (term.category && term.category.toUpperCase() === category) {
+                console.log(`只匹配到分类: ${category}`);
+                return term;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 根据关键词精确匹配术语
+     * @param {string} keyword - 要匹配的关键词
+     * @returns {Object|null} 匹配的术语或null
+     */
+    findTermByKeyword(keyword) {
+        if (!this.loaded || !keyword) {
+            return null;
+        }
+
+        // 转换为小写进行不区分大小写的匹配
+        const lowerKeyword = keyword.toLowerCase();
+
+        // 先尝试在术语源中精确匹配
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            if (term.source.toLowerCase() === lowerKeyword) {
+                console.log(`在术语源中精确匹配到关键词: ${keyword}`);
+                return term;
+            }
+        }
+
+        // 如果在术语源中没有找到，尝试在同义词中匹配
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            if (term.synonyms) {
+                const synonyms = term.synonyms.split(',').map(s => s.trim().toLowerCase());
+                if (synonyms.includes(lowerKeyword)) {
+                    console.log(`在同义词中精确匹配到关键词: ${keyword}`);
+                    return term;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 根据关键词部分匹配术语
+     * @param {string} keyword - 要匹配的关键词
+     * @returns {Object|null} 匹配的术语或null
+     */
+    findTermByPartialKeyword(keyword) {
+        if (!this.loaded || !keyword) {
+            return null;
+        }
+
+        // 转换为小写进行不区分大小写的匹配
+        const lowerKeyword = keyword.toLowerCase();
+
+        // 收集所有可能的匹配结果
+        const matches = [];
+
+        // 在术语源中匹配
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            const termSource = term.source.toLowerCase();
+
+            // 如果术语源包含关键词
+            if (termSource.includes(lowerKeyword)) {
+                matches.push({
+                    term: term,
+                    score: (lowerKeyword.length / termSource.length) * 100,
+                    matchType: 'source_contains'
+                });
+            }
+            // 如果关键词包含术语源
+            else if (lowerKeyword.includes(termSource)) {
+                matches.push({
+                    term: term,
+                    score: (termSource.length / lowerKeyword.length) * 80,
+                    matchType: 'keyword_contains_source'
+                });
+            }
+        }
+
+        // 在同义词中匹配
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            if (term.synonyms) {
+                const synonyms = term.synonyms.split(',').map(s => s.trim().toLowerCase());
+
+                for (let j = 0; j < synonyms.length; j++) {
+                    const synonym = synonyms[j];
+                    if (!synonym) continue;
+
+                    // 如果同义词包含关键词
+                    if (synonym.includes(lowerKeyword)) {
+                        matches.push({
+                            term: term,
+                            score: (lowerKeyword.length / synonym.length) * 60,
+                            matchType: 'synonym_contains'
+                        });
+                        break;
+                    }
+                    // 如果关键词包含同义词
+                    else if (lowerKeyword.includes(synonym)) {
+                        matches.push({
+                            term: term,
+                            score: (synonym.length / lowerKeyword.length) * 40,
+                            matchType: 'keyword_contains_synonym'
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 如果没有匹配结果，返回null
+        if (matches.length === 0) {
+            return null;
+        }
+
+        // 按分数排序，返回分数最高的匹配结果
+        matches.sort((a, b) => b.score - a.score);
+        const bestMatch = matches[0];
+        console.log(`部分匹配到关键词: ${keyword}, 匹配类型: ${bestMatch.matchType}, 分数: ${bestMatch.score}`);
+        return bestMatch.term;
     }
 
     /**

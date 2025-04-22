@@ -1,0 +1,147 @@
+{
+  "version": "1.0",
+  "settings": {
+    "defaultPriority": 10,
+    "multiMatchStrategy": "highestPriority"
+  },
+  "specialPatterns": [
+    {
+      "id": "bleep_sound",
+      "pattern": "bleep",
+      "matchType": "contains",
+      "priority": 20,
+      "description": "处理bleep测试音效",
+      "result": {
+        "source": "TEST TONE",
+        "target": "测试音",
+        "category": "TEST",
+        "categoryName": "TEST TONE",
+        "categoryNameZh": "测试音"
+      }
+    },
+    {
+      "id": "beep_sound",
+      "pattern": "beep",
+      "matchType": "contains",
+      "priority": 20,
+      "description": "处理beep测试音效",
+      "result": {
+        "source": "TEST TONE",
+        "target": "测试音",
+        "category": "TEST",
+        "categoryName": "TEST TONE",
+        "categoryNameZh": "测试音"
+      }
+    },
+    {
+      "id": "chinese_beep",
+      "pattern": "哔哔",
+      "matchType": "contains",
+      "priority": 20,
+      "description": "处理中文哔哔测试音效",
+      "result": {
+        "source": "TEST TONE",
+        "target": "测试音",
+        "category": "TEST",
+        "categoryName": "TEST TONE",
+        "categoryNameZh": "测试音"
+      }
+    },
+    {
+      "id": "synthetic_pop",
+      "pattern": "synthetic pop",
+      "matchType": "contains",
+      "priority": 30,
+      "description": "处理Synthetic Pop音效",
+      "result": {
+        "source": "POP",
+        "target": "道具",
+        "category": "TOON",
+        "categoryName": "CARTOON",
+        "categoryNameZh": "卡通",
+        "synonyms": "pop gun, mouth pop, suction cup, bubble pops",
+        "synonymsZh": "吸盆、泡泡爆破"
+      }
+    },
+    {
+      "id": "small_pop",
+      "pattern": "small pop",
+      "matchType": "contains",
+      "priority": 25,
+      "description": "处理Small Pop音效",
+      "result": {
+        "source": "POP",
+        "target": "道具",
+        "category": "TOON",
+        "categoryName": "CARTOON",
+        "categoryNameZh": "卡通",
+        "synonyms": "pop gun, mouth pop, suction cup, bubble pops",
+        "synonymsZh": "吸盆、泡泡爆破"
+      }
+    },
+    {
+      "id": "slap_pop",
+      "pattern": "slap pop",
+      "matchType": "contains",
+      "priority": 25,
+      "description": "处理Slap Pop音效",
+      "result": {
+        "source": "POP",
+        "target": "道具",
+        "category": "TOON",
+        "categoryName": "CARTOON",
+        "categoryNameZh": "卡通",
+        "synonyms": "pop gun, mouth pop, suction cup, bubble pops",
+        "synonymsZh": "吸盆、泡泡爆破"
+      }
+    },
+    {
+      "id": "generic_pop",
+      "pattern": "pop",
+      "matchType": "contains",
+      "priority": 5,
+      "description": "处理一般的Pop音效",
+      "result": {
+        "source": "POP",
+        "target": "道具",
+        "category": "TOON",
+        "categoryName": "CARTOON",
+        "categoryNameZh": "卡通",
+        "synonyms": "pop gun, mouth pop, suction cup, bubble pops",
+        "synonymsZh": "吸盆、泡泡爆破"
+      }
+    },
+    {
+      "id": "explosion_regex",
+      "pattern": "explo(sion|de|ding)",
+      "matchType": "regex",
+      "priority": 15,
+      "description": "处理各种爆炸音效",
+      "result": {
+        "source": "EXPLOSION",
+        "target": "爆炸",
+        "category": "DSGN",
+        "categoryName": "DESIGNED",
+        "categoryNameZh": "设计音",
+        "synonyms": "blast, boom, bang",
+        "synonymsZh": "爆炸、爆炸声"
+      }
+    },
+    {
+      "id": "whoosh_regex",
+      "pattern": "(whoosh|swish|swoosh)",
+      "matchType": "regex",
+      "priority": 15,
+      "description": "处理各种呼啸音效",
+      "result": {
+        "source": "WHOOSH",
+        "target": "呼啸",
+        "category": "DSGN",
+        "categoryName": "DESIGNED",
+        "categoryNameZh": "设计音",
+        "synonyms": "swish, swoosh, air movement",
+        "synonymsZh": "呼啸、空气移动"
+      }
+    }
+  ]
+}

@@ -33,110 +33,10 @@ class NamingRules {
 
         // 分类ID映射表
         this.categoryIDMap = {
-            'Ambience': 'AMB',
-            'Impact': 'IMP',
-            'Foley': 'FOL',
-            'Voice': 'VOX',
-            'Music': 'MUS',
-            'Interface': 'UI',
-            'Weapon': 'WPN',
-            'Vehicle': 'VEH',
-            'Creature': 'CRE',
-            'Magic': 'MAG',
-            'Footstep': 'FST',
-            'Door': 'DOR',
-            'Mechanism': 'MCH',
-            'Explosion': 'EXP',
-            'Weather': 'WTH',
-            'Nature': 'NAT',
-            'Cloth': 'CLT',
-            'Metal': 'MTL',
-            'Wood': 'WOD',
-            'Glass': 'GLS',
-            'Stone': 'STN',
-            'Water': 'WTR',
-            'Fire': 'FIR',
-            'Wind': 'WND',
-            'Electricity': 'ELC',
-            'Button': 'BTN',
-            'Notification': 'NTF',
-            'Alarm': 'ALM',
-            'Beep': 'BEP',
-            'Whoosh': 'WSH',
-            'Sci-Fi': 'SCI',
-            'Horror': 'HOR',
-            'Fantasy': 'FNT',
-            'Cartoon': 'CTN',
-            'Human': 'HUM',
-            'Animal': 'ANM',
-            'Robot': 'ROB',
-            'Monster': 'MON',
-            'Insect': 'INS',
-            'Bird': 'BRD',
-            'Debris': 'DBR',
-            'Destruction': 'DST',
-            'Cinematic': 'CIN',
-            'Transition': 'TRN',
-            'Stinger': 'STG',
-            'Loop': 'LOP',
-            'Oneshot': 'ONE',
-            'Misc': 'MSC',
-            'TEST': 'TEST',
-            'ARCHIVED': 'ARCH'
         };
 
         // 分类中文名映射表
         this.categoryChineseMap = {
-            'Ambience': '环境',
-            'Impact': '撞击',
-            'Foley': '拟音',
-            'Voice': '语音',
-            'Music': '音乐',
-            'Interface': '界面',
-            'Weapon': '武器',
-            'Vehicle': '载具',
-            'Creature': '生物',
-            'Magic': '魔法',
-            'Footstep': '脚步',
-            'Door': '门',
-            'Mechanism': '机械',
-            'Explosion': '爆炸',
-            'Weather': '天气',
-            'Nature': '自然',
-            'Cloth': '布料',
-            'Metal': '金属',
-            'Wood': '木头',
-            'Glass': '玻璃',
-            'Stone': '石头',
-            'Water': '水',
-            'Fire': '火',
-            'Wind': '风',
-            'Electricity': '电',
-            'Button': '按钮',
-            'Notification': '通知',
-            'Alarm': '警报',
-            'Beep': '蜂鸣',
-            'Whoosh': '呼啸',
-            'Sci-Fi': '科幻',
-            'Horror': '恐怖',
-            'Fantasy': '奇幻',
-            'Cartoon': '卡通',
-            'Human': '人类',
-            'Animal': '动物',
-            'Robot': '机器人',
-            'Monster': '怪物',
-            'Insect': '昆虫',
-            'Bird': '鸟类',
-            'Debris': '碎片',
-            'Destruction': '破坏',
-            'Cinematic': '电影',
-            'Transition': '过渡',
-            'Stinger': '短音',
-            'Loop': '循环',
-            'Oneshot': '单次',
-            'Misc': '杂项',
-            'TEST': '测试',
-            'ARCHIVED': '归档'
         };
     }
 
@@ -320,27 +220,38 @@ class NamingRules {
         const separator = this.settings.separator || '_';
 
         // 确保文件有分类，如果没有则使用默认分类
-        const category = file.category || 'Misc';
+        const category = file.categoryName || file.category || 'MISC';
 
         // 添加各个命名元素
         if (elements.catID) {
-            parts.push(this._getCategoryID(category));
+            // 如果文件对象中有catID属性，优先使用
+            if (file.catID) {
+                parts.push(file.catID);
+            }
+            // 如果是Synthetic Pop，直接使用TOONPop
+            else if (category === 'TOON' && file.subCategory === 'POP') {
+                parts.push('TOONPop');
+            } else {
+                parts.push(this._getCategoryID(category));
+            }
         }
 
         if (elements.category) {
+            // 使用categoryName而不是category（后者是缩写）
             parts.push(category);
         }
 
         if (elements.category_zh) {
-            parts.push(this._getCategoryChineseName(category));
+            // 优先使用文件对象中的categoryNameZh属性，如果没有则使用默认映射
+            parts.push(file.categoryNameZh || this._getCategoryChineseName(category));
         }
 
         if (elements.subCategory && file.subCategory) {
             parts.push(file.subCategory);
         }
 
-        if (elements.subCategory_zh && file.subCategory) {
-            parts.push(file.subCategoryTranslated || '');
+        if (elements.subCategory_zh && file.subCategoryTranslated) {
+            parts.push(file.subCategoryTranslated);
         }
 
         if (elements.fxName) {
@@ -348,7 +259,7 @@ class NamingRules {
             parts.push(file.standardizedName || file.nameWithoutNumber || file.name);
         }
 
-        if (elements.fxName_zh) {
+        if (elements.fxName_zh && file.translatedName) {
             // 使用翻译后的文件名（不带序号）
             parts.push(file.translatedName);
         }
@@ -383,7 +294,74 @@ class NamingRules {
      * @private
      */
     _getCategoryID(category) {
-        return this.categoryIDMap[category] || 'MSC'; // 默认返回杂项分类
+        // 特殊处理TOON分类
+        if (category === 'TOON') {
+            // 对于POP子分类，返回TOONPop
+            return 'TOONPop';
+        }
+
+        // 处理常见分类
+        const categoryMap = {
+            'DESIGNED': 'DSGN',
+            'SCIENCE FICTION': 'SCIF',
+            'MISCELLANEOUS': 'MISC',
+            'ANIMAL': 'ANML',
+            'CARTOON': 'TOON',
+            'HUMAN': 'HMN',
+            'VEHICLE': 'VHCL',
+            'WEAPON': 'WPN',
+            'WEATHER': 'WTHR',
+            'HOUSEHOLD': 'HSHD',
+            'INDUSTRIAL': 'INDS',
+            'INTERFACE': 'UI',
+            'FOLEY': 'FOLY',
+            'FOOTSTEP': 'FTSP',
+            'IMPACT': 'IMPT',
+            'MULTIMEDIA': 'MLTM',
+            'MUSIC': 'MUS',
+            'NATURE': 'NTUR',
+            'OFFICE': 'OFFC',
+            'TECHNOLOGY': 'TECH',
+            'TOOL': 'TOOL',
+            'WATER': 'WATR',
+            'WHOOSH': 'WHSH',
+            'DSGN': 'DSGN',
+            'SCIF': 'SCIF',
+            'MISC': 'MISC',
+            'ANML': 'ANML',
+            'TOON': 'TOON',
+            'HMN': 'HMN',
+            'VHCL': 'VHCL',
+            'WPN': 'WPN',
+            'WTHR': 'WTHR',
+            'HSHD': 'HSHD',
+            'INDS': 'INDS',
+            'UI': 'UI',
+            'FOLY': 'FOLY',
+            'FTSP': 'FTSP',
+            'IMPT': 'IMPT',
+            'MLTM': 'MLTM',
+            'MUS': 'MUS',
+            'NTUR': 'NTUR',
+            'OFFC': 'OFFC',
+            'TECH': 'TECH',
+            'TOOL': 'TOOL',
+            'WATR': 'WATR',
+            'WHSH': 'WHSH'
+        };
+
+        // 先检查映射表
+        if (categoryMap[category]) {
+            return categoryMap[category];
+        }
+
+        // 然后检查自定义映射表
+        if (this.categoryIDMap[category]) {
+            return this.categoryIDMap[category];
+        }
+
+        // 默认返回杂项分类
+        return 'MSC';
     }
 
     /**
@@ -393,7 +371,68 @@ class NamingRules {
      * @private
      */
     _getCategoryChineseName(category) {
-        return this.categoryChineseMap[category] || '杂项'; // 默认返回杂项
+        // 处理常见分类
+        const categoryChineseMap = {
+            'DESIGNED': '设计音',
+            'SCIENCE FICTION': '科幻',
+            'MISCELLANEOUS': '杂项',
+            'ANIMAL': '动物',
+            'CARTOON': '卡通',
+            'HUMAN': '人类',
+            'VEHICLE': '交通工具',
+            'WEAPON': '武器',
+            'WEATHER': '天气',
+            'HOUSEHOLD': '家居',
+            'INDUSTRIAL': '工业',
+            'INTERFACE': '界面',
+            'FOLEY': '拉音',
+            'FOOTSTEP': '脚步声',
+            'IMPACT': '撞击',
+            'MULTIMEDIA': '多媒体',
+            'MUSIC': '音乐',
+            'NATURE': '自然',
+            'OFFICE': '办公室',
+            'TECHNOLOGY': '科技',
+            'TOOL': '工具',
+            'WATER': '水',
+            'WHOOSH': '呼啸',
+            'DSGN': '设计音',
+            'SCIF': '科幻',
+            'MISC': '杂项',
+            'ANML': '动物',
+            'TOON': '卡通',
+            'HMN': '人类',
+            'VHCL': '交通工具',
+            'WPN': '武器',
+            'WTHR': '天气',
+            'HSHD': '家居',
+            'INDS': '工业',
+            'UI': '界面',
+            'FOLY': '拉音',
+            'FTSP': '脚步声',
+            'IMPT': '撞击',
+            'MLTM': '多媒体',
+            'MUS': '音乐',
+            'NTUR': '自然',
+            'OFFC': '办公室',
+            'TECH': '科技',
+            'TOOL': '工具',
+            'WATR': '水',
+            'WHSH': '呼啸'
+        };
+
+        // 先检查映射表
+        if (categoryChineseMap[category]) {
+            return categoryChineseMap[category];
+        }
+
+        // 然后检查自定义映射表
+        if (this.categoryChineseMap[category]) {
+            return this.categoryChineseMap[category];
+        }
+
+        // 默认返回杂项
+        return '杂项';
     }
 }
 

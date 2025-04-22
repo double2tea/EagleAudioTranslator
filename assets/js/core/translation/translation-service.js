@@ -166,6 +166,27 @@ class TranslationService {
             throw new Error('未设置活动翻译提供者');
         }
 
+        // 特殊处理Synthetic Pop、Small Pop和Slap Pop
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes('pop')) {
+            if (lowerText.includes('synthetic pop')) {
+                Logger.debug(`特殊处理Synthetic Pop: ${text} -> 电子合成`);
+                return '电子合成';
+            } else if (lowerText.includes('small pop')) {
+                Logger.debug(`特殊处理Small Pop: ${text} -> 小型爆破`);
+                return '小型爆破';
+            } else if (lowerText.includes('slap pop')) {
+                Logger.debug(`特殊处理Slap Pop: ${text} -> 拍击爆破`);
+                return '拍击爆破';
+            }
+        }
+
+        // 特殊处理分类ID
+        if (lowerText === 'toonpop') {
+            Logger.debug(`特殊处理分类ID: ${text} -> TOONPop`);
+            return 'TOONPop';
+        }
+
         // 检查缓存
         const cacheKey = `${this.activeProvider.getId()}:${this.settings.sourceLanguage}:${this.settings.targetLanguage}:${text}`;
         if (this.settings.useCache) {
@@ -430,6 +451,39 @@ class TranslationService {
         if (this.providers['libre']) {
             this.providers['libre'].setEndpoint(endpoint);
         }
+    }
+
+    /**
+     * 发送请求到AI接口
+     * @param {string} prompt - 提示词
+     * @param {string} from - 源语言代码
+     * @param {string} to - 目标语言代码
+     * @param {string} type - 请求类型（翻译、分类等）
+     * @returns {Promise<string>} AI响应
+     */
+    async sendRequest(prompt, from, to, type = 'translation') {
+        if (!this.activeProvider) {
+            throw new Error('未设置活动翻译提供者');
+        }
+
+        // 如果活动提供者有sendRequest方法，使用它
+        if (typeof this.activeProvider.sendRequest === 'function') {
+            return await this.activeProvider.sendRequest(prompt, from, to, type);
+        }
+
+        // 否则使用translate方法
+        return await this.activeProvider.translate(prompt, from, to);
+    }
+
+    /**
+     * 获取当前活动的提供者ID
+     * @returns {string} 提供者ID
+     */
+    getId() {
+        if (!this.activeProvider) {
+            return 'unknown';
+        }
+        return this.activeProvider.getId();
     }
 
     /**

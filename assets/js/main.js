@@ -862,31 +862,31 @@ function initTranslationSettings() {
         window.pluginState.fileProcessor.setUseCSV(useCSVCheckbox.checked);
     }
 
-    // AI辅助分类匹配设置
+    // AI辅助分类设置
     if (useAIClassificationCheckbox && window.pluginState.csvMatcher) {
         useAIClassificationCheckbox.addEventListener('change', function() {
+            console.log('切换AI辅助分类功能:', this.checked);
             window.pluginState.csvMatcher.setAIClassifier(this.checked);
-
-            // 显示状态提示
-            updateStatus('AI辅助分类匹配功能已' + (this.checked ? '启用' : '禁用'));
-
-            // 如果启用了AI辅助分类匹配，但没有加载AI分类器脚本，显示警告
-            if (this.checked && !window.AIClassifier) {
-                console.warn('AI分类器脚本未加载，请检查是否已包含ai-classifier.js');
-                updateStatus('警告：AI分类器脚本未加载，该功能可能无法正常工作');
-            }
+            updateStatus(`AI辅助分类功能已${this.checked ? '启用' : '禁用'}`);
         });
 
         // 从本地存储加载设置（如果有）
-        const savedAIClassification = localStorage.getItem('useAIClassification');
-        if (savedAIClassification === 'true') {
-            useAIClassificationCheckbox.checked = true;
-            window.pluginState.csvMatcher.setAIClassifier(true);
+        const savedSetting = localStorage.getItem('useAIClassification');
+        if (savedSetting !== null) {
+            const enabled = savedSetting === 'true';
+            useAIClassificationCheckbox.checked = enabled;
+            window.pluginState.csvMatcher.setAIClassifier(enabled);
+            console.log(`从本地存储加载AI辅助分类设置: ${enabled}`);
+        } else {
+            // 设置初始值
+            window.pluginState.csvMatcher.setAIClassifier(useAIClassificationCheckbox.checked);
+            console.log(`设置AI辅助分类初始值: ${useAIClassificationCheckbox.checked}`);
         }
 
         // 保存到本地存储
         useAIClassificationCheckbox.addEventListener('change', function() {
             localStorage.setItem('useAIClassification', this.checked);
+            console.log(`保存AI辅助分类设置到本地存储: ${this.checked}`);
         });
     }
 }
@@ -898,8 +898,12 @@ function checkDependencies() {
         'TranslationProvider',
         'GoogleTranslateProvider',
         'LibreTranslateProvider',
+        'ZhipuAIProvider',
+        'DeepseekProvider',
+        'OpenRouterProvider',
         'NamingRules',
         'CSVMatcher',
+        'AIClassifier',
         'FileProcessor',
         'FileSelector',
         'TranslationPanel',
@@ -952,7 +956,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const requiredClasses = [
                 'TranslationService', 'TranslationProvider', 'GoogleTranslateProvider',
-                'LibreTranslateProvider', 'NamingRules', 'CSVMatcher', 'FileProcessor'
+                'LibreTranslateProvider', 'ZhipuAIProvider', 'DeepseekProvider', 'OpenRouterProvider',
+                'NamingRules', 'CSVMatcher', 'AIClassifier', 'FileProcessor'
             ];
 
             for (const className of requiredClasses) {
