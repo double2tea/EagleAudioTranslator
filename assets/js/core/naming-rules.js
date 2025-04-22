@@ -243,25 +243,30 @@ class NamingRules {
 
         if (elements.category_zh) {
             // 优先使用文件对象中的categoryNameZh属性，如果没有则使用默认映射
-            parts.push(file.categoryNameZh || this._getCategoryChineseName(category));
+            const categoryZh = file.categoryNameZh || this._getCategoryChineseName(category);
+            // 去除多余空格
+            parts.push(categoryZh.replace(/\s+/g, '').trim());
         }
 
         if (elements.subCategory && file.subCategory) {
-            parts.push(file.subCategory);
+            parts.push(file.subCategory.replace(/\s+/g, '').trim());
         }
 
         if (elements.subCategory_zh && file.subCategoryTranslated) {
-            parts.push(file.subCategoryTranslated);
+            parts.push(file.subCategoryTranslated.replace(/\s+/g, '').trim());
         }
 
         if (elements.fxName) {
             // 使用标准化的英文描述（如果有），否则使用不带序号的文件名
-            parts.push(file.standardizedName || file.nameWithoutNumber || file.name);
+            const fxName = file.standardizedName || file.nameWithoutNumber || file.name;
+            parts.push(fxName.replace(/\s+/g, ' ').trim());
         }
 
         if (elements.fxName_zh && file.translatedName) {
             // 使用翻译后的文件名（不带序号）
-            parts.push(file.translatedName);
+            // 确保去除多余空格
+            const translatedName = file.translatedName.replace(/\s+/g, '').trim();
+            parts.push(translatedName);
         }
 
         if (elements.creatorID) {
@@ -283,8 +288,11 @@ class NamingRules {
             parts.push(serialNumber);
         }
 
+        // 过滤掉空元素
+        const filteredParts = parts.filter(part => part && part.trim() !== '');
+
         // 组合文件名
-        return parts.join(separator);
+        return filteredParts.join(separator);
     }
 
     /**
@@ -302,52 +310,6 @@ class NamingRules {
 
         // 处理常见分类
         const categoryMap = {
-            'DESIGNED': 'DSGN',
-            'SCIENCE FICTION': 'SCIF',
-            'MISCELLANEOUS': 'MISC',
-            'ANIMAL': 'ANML',
-            'CARTOON': 'TOON',
-            'HUMAN': 'HMN',
-            'VEHICLE': 'VHCL',
-            'WEAPON': 'WPN',
-            'WEATHER': 'WTHR',
-            'HOUSEHOLD': 'HSHD',
-            'INDUSTRIAL': 'INDS',
-            'INTERFACE': 'UI',
-            'FOLEY': 'FOLY',
-            'FOOTSTEP': 'FTSP',
-            'IMPACT': 'IMPT',
-            'MULTIMEDIA': 'MLTM',
-            'MUSIC': 'MUS',
-            'NATURE': 'NTUR',
-            'OFFICE': 'OFFC',
-            'TECHNOLOGY': 'TECH',
-            'TOOL': 'TOOL',
-            'WATER': 'WATR',
-            'WHOOSH': 'WHSH',
-            'DSGN': 'DSGN',
-            'SCIF': 'SCIF',
-            'MISC': 'MISC',
-            'ANML': 'ANML',
-            'TOON': 'TOON',
-            'HMN': 'HMN',
-            'VHCL': 'VHCL',
-            'WPN': 'WPN',
-            'WTHR': 'WTHR',
-            'HSHD': 'HSHD',
-            'INDS': 'INDS',
-            'UI': 'UI',
-            'FOLY': 'FOLY',
-            'FTSP': 'FTSP',
-            'IMPT': 'IMPT',
-            'MLTM': 'MLTM',
-            'MUS': 'MUS',
-            'NTUR': 'NTUR',
-            'OFFC': 'OFFC',
-            'TECH': 'TECH',
-            'TOOL': 'TOOL',
-            'WATR': 'WATR',
-            'WHSH': 'WHSH'
         };
 
         // 先检查映射表
@@ -373,52 +335,6 @@ class NamingRules {
     _getCategoryChineseName(category) {
         // 处理常见分类
         const categoryChineseMap = {
-            'DESIGNED': '设计音',
-            'SCIENCE FICTION': '科幻',
-            'MISCELLANEOUS': '杂项',
-            'ANIMAL': '动物',
-            'CARTOON': '卡通',
-            'HUMAN': '人类',
-            'VEHICLE': '交通工具',
-            'WEAPON': '武器',
-            'WEATHER': '天气',
-            'HOUSEHOLD': '家居',
-            'INDUSTRIAL': '工业',
-            'INTERFACE': '界面',
-            'FOLEY': '拉音',
-            'FOOTSTEP': '脚步声',
-            'IMPACT': '撞击',
-            'MULTIMEDIA': '多媒体',
-            'MUSIC': '音乐',
-            'NATURE': '自然',
-            'OFFICE': '办公室',
-            'TECHNOLOGY': '科技',
-            'TOOL': '工具',
-            'WATER': '水',
-            'WHOOSH': '呼啸',
-            'DSGN': '设计音',
-            'SCIF': '科幻',
-            'MISC': '杂项',
-            'ANML': '动物',
-            'TOON': '卡通',
-            'HMN': '人类',
-            'VHCL': '交通工具',
-            'WPN': '武器',
-            'WTHR': '天气',
-            'HSHD': '家居',
-            'INDS': '工业',
-            'UI': '界面',
-            'FOLY': '拉音',
-            'FTSP': '脚步声',
-            'IMPT': '撞击',
-            'MLTM': '多媒体',
-            'MUS': '音乐',
-            'NTUR': '自然',
-            'OFFC': '办公室',
-            'TECH': '科技',
-            'TOOL': '工具',
-            'WATR': '水',
-            'WHSH': '呼啸'
         };
 
         // 先检查映射表

@@ -177,9 +177,10 @@ class FileProcessor {
     /**
      * 处理文件翻译
      * @param {Array} files - 要处理的文件
+     * @param {Function} onFileProcessed - 文件处理完成后的回调函数
      * @returns {Promise<Array>} 处理后的文件
      */
-    async processTranslation(files) {
+    async processTranslation(files, onFileProcessed = null) {
         if (this.isProcessing) {
             throw new Error('已有翻译任务正在进行中');
         }
@@ -461,6 +462,13 @@ class FileProcessor {
                     try {
                         // 只翻译不带序号的部分
                         file.translatedName = await this.translationService.translate(file.nameWithoutNumber);
+
+                        // 去除翻译结果中的多余空格
+                        if (file.translatedName) {
+                            // 将多个连续空格替换为单个空格，然后去除首尾空格
+                            file.translatedName = file.translatedName.replace(/\s+/g, ' ').trim();
+                        }
+
                         Logger.debug(`文件 "${file.name}" 翻译结果(FXname_zh): "${file.translatedName}"`);
                     } catch (translateError) {
                         Logger.error(`文件 "${file.name}" 翻译失败`, translateError);
@@ -480,6 +488,11 @@ class FileProcessor {
                     file.status = 'error';
                     file.errorMessage = error.message;
                     Logger.error(`文件 "${file.name}" 翻译失败`, error);
+                }
+
+                // 如果提供了回调函数，则调用它通知文件处理完成
+                if (typeof onFileProcessed === 'function') {
+                    onFileProcessed(fileObjects, i);
                 }
             }
 

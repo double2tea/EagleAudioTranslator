@@ -217,17 +217,31 @@ class PreviewPanel {
         this._updatePreviewTable();
 
         try {
-            // 执行翻译
-            const translatedFiles = await this.fileProcessor.processTranslation(selectedFiles);
+            // 执行翻译，并传入回调函数实现实时更新
+            const translatedFiles = await this.fileProcessor.processTranslation(selectedFiles, (files, index) => {
+                // 在每个文件处理完成后更新数据
+                const processedFile = files[index];
 
-            // 更新文件数据
-            this.files = this.files.map(file => {
-                const translatedFile = translatedFiles.find(tf => tf.id === file.id);
-                return translatedFile || file;
+                // 更新当前文件的数据
+                this.files = this.files.map(file => {
+                    if (file.id === processedFile.id) {
+                        return processedFile;
+                    }
+                    return file;
+                });
+
+                // 更新表格中当前文件的行
+                // 找到文件在数组中的索引
+                const fileIndex = this.files.findIndex(f => f.id === processedFile.id);
+                if (fileIndex !== -1) {
+                    this._updateRowData(fileIndex, processedFile);
+                }
+
+                // 显示处理进度
+                const processedCount = this.files.filter(f => f.status === 'success' || f.status === 'error').length;
+                const totalCount = selectedFiles.length;
+                this._showStatusMessage(`翻译进度: ${processedCount}/${totalCount}`);
             });
-
-            // 更新表格显示
-            this._updatePreviewTable();
 
             // 启用应用文件名按钮
             const applyNamesBtn = document.getElementById('applyNamesBtn');
@@ -373,18 +387,35 @@ class PreviewPanel {
     /**
      * 显示状态消息
      * @param {string} message - 状态消息
+     * @param {boolean} autoHide - 是否自动隐藏消息
      * @private
      */
-    _showStatusMessage(message) {
+    _showStatusMessage(message, autoHide = true) {
         const statusElement = document.getElementById('statusMessage');
         if (!statusElement) return;
+
+        // 清除之前的定时器
+        if (this._statusMessageTimer) {
+            clearTimeout(this._statusMessageTimer);
+            this._statusMessageTimer = null;
+        }
 
         statusElement.textContent = message;
         statusElement.classList.add('show');
 
-        setTimeout(() => {
-            statusElement.classList.remove('show');
-        }, 3000);
+        // 如果是进度消息，添加特殊样式并不自动隐藏
+        const isProgressMessage = message.includes('进度:');
+        if (isProgressMessage) {
+            statusElement.classList.add('progress');
+        } else {
+            statusElement.classList.remove('progress');
+        }
+
+        if (autoHide && !isProgressMessage) {
+            this._statusMessageTimer = setTimeout(() => {
+                statusElement.classList.remove('show');
+            }, 3000);
+        }
     }
 }
 
