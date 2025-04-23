@@ -179,11 +179,6 @@ class AIClassifier {
         if (isChinese) {
             return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下中文音效文件名，分析并提供每个文件的分类信息。
 
-重要：你必须严格使用以下有效的分类ID(CatID)，不要创造新的分类ID：
-- 对于故障/毁损/噪音类型的音效，应使用DSGNRythm（设计音/节奏性）作为CatID
-- 对于科幻类型的音效，应使用SCIMisc（科幻/其他）或其他SCI前缀的分类
-- 对于数字/电子类型的音效，应使用DSGNSynth（设计音/电子合成）或UIGlitch（用户界面/故障）
-
 请使用以下格式返回结果（JSON格式）：
 
 {
@@ -191,12 +186,12 @@ class AIClassifier {
     {
       "filename": "文件名",
       "classification": {
-        "catID": "分类ID，必须是UCS标准表格中存在的ID，如DSGNRythm、SCIMisc、TOONPop等",
-        "catShort": "短分类名，如DSGN、SCI、TOON等",
-        "category": "主分类英文名，如DESIGNED、SCIENCE FICTION、CARTOON等",
-        "category_zh": "主分类中文名，如声音设计、科幻、卡通等",
-        "subCategory": "子分类英文名，如RHYTHMIC、MISC、POP等",
-        "subCategory_zh": "子分类中文名，如节奏性、其他、爆破等",
+        "catID": "分类ID，必须是UCS标准表格中存在的ID，如GLASImpt、OBJTape、DSGNRythm、SCIMisc、TOONPop等",
+        "catShort": "短分类名，如OBJ、DSGN、SCI、TOON等",
+        "category": "主分类英文名，如OBJECT、DESIGNED、SCIENCE FICTION、CARTOON等",
+        "category_zh": "主分类中文名，如物体、声音设计、科幻、卡通等",
+        "subCategory": "子分类英文名，如TAPE、RHYTHMIC、MISC、POP等",
+        "subCategory_zh": "子分类中文名，如磁带、节奏性、其他、爆破等",
         "englishDescription": "简短英文描述，不超过5个单词"
       }
     }
@@ -210,18 +205,10 @@ ${filenames.join('\n')}
 1. 请只返回JSON格式的结果，不要包含其他解释文字
 2. 如果无法确定某个分类信息，可以将对应字段设为null
 3. 你必须使用UCS标准表格中存在的有效分类ID(CatID)，不要创造新的分类ID
-4. 对于故障/毁损/噪音类型的音效，应使用DSGNRythm作为CatID
-5. 对于科幻类型的音效，应使用SCIMisc或其他SCI前缀的分类
-6. 对于数字/电子类型的音效，应使用DSGNSynth或UIGlitch
-7. 请同时提供简短英文描述，便于生成英文标准化名称`;
+4. 请同时提供简短英文描述，便于生成英文标准化名称`;
         } else {
             // 英文文件名使用原有提示词
             return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下音效文件名，分析并提供每个文件的分类信息。
-
-重要：你必须严格使用以下有效的分类ID(CatID)，不要创造新的分类ID：
-- 对于Glitch类型的音效，应使用DSGNRythm（设计音/节奏性）作为CatID
-- 对于科幻类型的音效，应使用SCIMisc（科幻/其他）或其他SCI前缀的分类
-- 对于数字/电子类型的音效，应使用DSGNSynth（设计音/电子合成）或UIGlitch（用户界面/故障）
 
 请使用以下格式返回结果（JSON格式）：
 
@@ -230,12 +217,12 @@ ${filenames.join('\n')}
     {
       "filename": "文件名",
       "classification": {
-        "catID": "分类ID，必须是UCS标准表格中存在的ID，如DSGNRythm、SCIMisc、TOONPop等",
-        "catShort": "短分类名，如DSGN、SCI、TOON等",
-        "category": "主分类英文名，如DESIGNED、SCIENCE FICTION、CARTOON等",
-        "category_zh": "主分类中文名，如声音设计、科幻、卡通等",
-        "subCategory": "子分类英文名，如RHYTHMIC、MISC、POP等",
-        "subCategory_zh": "子分类中文名，如节奏性、其他、爆破等"
+        "catID": "分类ID，必须是UCS标准表格中存在的ID，如GLASImpt、OBJTape、DSGNRythm、SCIMisc、TOONPop等",
+        "catShort": "短分类名，如OBJ、DSGN、SCI、TOON等",
+        "category": "主分类英文名，如OBJECT、DESIGNED、SCIENCE FICTION、CARTOON等",
+        "category_zh": "主分类中文名，如物体、声音设计、科幻、卡通等",
+        "subCategory": "子分类英文名，如TAPE、RHYTHMIC、MISC、POP等",
+        "subCategory_zh": "子分类中文名，如磁带、节奏性、其他、爆破等"
       }
     }
   ]
@@ -248,9 +235,7 @@ ${filenames.join('\n')}
 1. 请只返回JSON格式的结果，不要包含其他解释文字
 2. 如果无法确定某个分类信息，可以将对应字段设为null
 3. 你必须使用是UCS标准表格中存在的有效分类ID(CatID)，不要创造新的分类ID
-4. 对于Glitch类型的音效，应使用DSGNRythm作为CatID
-5. 对于科幻类型的音效，应使用SCIMisc或其他SCI前缀的分类
-6. 对于数字/电子类型的音效，应使用DSGNSynth或UIGlitch`;
+4. 对于数字/电子类型的音效，应使用DSGNSynth或UIGlitch`;
         }
     }
 
@@ -376,8 +361,114 @@ ${filenames.join('\n')}
 
                 // 为每个文件创建默认分类
                 filenames.forEach(filename => {
-                    // 对于Glitch类型的音效，使用DSGNRythm
-                    if (filename.toLowerCase().includes('glitch')) {
+                    // 对文件名进行小写处理便于匹配
+                    const lowerFilename = filename.toLowerCase();
+
+                    // 优先级 1: 动物叫声类型的音效，使用相应的动物分类
+                    if (lowerFilename.includes('sheep') || lowerFilename.includes('羊')) {
+                        result[filename] = {
+                            catID: 'ANMLFarm',
+                            catShort: 'ANML',
+                            category: 'ANIMAL',
+                            category_zh: '动物',
+                            subCategory: 'FARM',
+                            subCategory_zh: '农场'
+                        };
+                        console.log(`手动创建分类: ${filename} -> ANMLFarm`);
+                    }
+                    else if (lowerFilename.includes('cat') || lowerFilename.includes('猫')) {
+                        result[filename] = {
+                            catID: 'ANMLCat',
+                            catShort: 'ANML',
+                            category: 'ANIMAL',
+                            category_zh: '动物',
+                            subCategory: 'CAT',
+                            subCategory_zh: '猫'
+                        };
+                        console.log(`手动创建分类: ${filename} -> ANMLCat`);
+                    }
+                    else if (lowerFilename.includes('dog') || lowerFilename.includes('狗')) {
+                        result[filename] = {
+                            catID: 'ANMLDog',
+                            catShort: 'ANML',
+                            category: 'ANIMAL',
+                            category_zh: '动物',
+                            subCategory: 'DOG',
+                            subCategory_zh: '狗'
+                        };
+                        console.log(`手动创建分类: ${filename} -> ANMLDog`);
+                    }
+                    else if (lowerFilename.includes('bird') || lowerFilename.includes('鸟')) {
+                        result[filename] = {
+                            catID: 'BIRDMisc',
+                            catShort: 'BIRD',
+                            category: 'BIRD',
+                            category_zh: '鸟类',
+                            subCategory: 'MISC',
+                            subCategory_zh: '其他'
+                        };
+                        console.log(`手动创建分类: ${filename} -> BIRDMisc`);
+                    }
+                    else if (lowerFilename.includes('seagull') || lowerFilename.includes('gull') || lowerFilename.includes('海鸥')) {
+                        result[filename] = {
+                            catID: 'BIRDSea',
+                            catShort: 'BIRD',
+                            category: 'BIRD',
+                            category_zh: '鸟类',
+                            subCategory: 'SEA',
+                            subCategory_zh: '海鸟'
+                        };
+                        console.log(`手动创建分类: ${filename} -> BIRDSea`);
+                    }
+                    else if (lowerFilename.includes('cow') || lowerFilename.includes('牛')) {
+                        result[filename] = {
+                            catID: 'ANMLFarm',
+                            catShort: 'ANML',
+                            category: 'ANIMAL',
+                            category_zh: '动物',
+                            subCategory: 'FARM',
+                            subCategory_zh: '农场'
+                        };
+                        console.log(`手动创建分类: ${filename} -> ANMLFarm`);
+                    }
+
+                    // 优先级 2: 物体相关的音效
+                    else if (lowerFilename.includes('tape') || lowerFilename.includes('cassette') || lowerFilename.includes('磁带')) {
+                        result[filename] = {
+                            catID: 'OBJTape',
+                            catShort: 'OBJ',
+                            category: 'OBJECT',
+                            category_zh: '物体',
+                            subCategory: 'TAPE',
+                            subCategory_zh: '磁带'
+                        };
+                        console.log(`手动创建分类: ${filename} -> OBJTape`);
+                    }
+                    else if (lowerFilename.includes('paper') || lowerFilename.includes('纸')) {
+                        result[filename] = {
+                            catID: 'OBJPaper',
+                            catShort: 'OBJ',
+                            category: 'OBJECT',
+                            category_zh: '物体',
+                            subCategory: 'PAPER',
+                            subCategory_zh: '纸张'
+                        };
+                        console.log(`手动创建分类: ${filename} -> OBJPaper`);
+                    }
+                    else if (lowerFilename.includes('metal') || lowerFilename.includes('steel') || lowerFilename.includes('金属')) {
+                        result[filename] = {
+                            catID: 'OBJMetal',
+                            catShort: 'OBJ',
+                            category: 'OBJECT',
+                            category_zh: '物体',
+                            subCategory: 'METAL',
+                            subCategory_zh: '金属'
+                        };
+                        console.log(`手动创建分类: ${filename} -> OBJMetal`);
+                    }
+
+                    // 优先级 3: 其他特殊类型的音效
+                    else if (lowerFilename.includes('glitch')) {
                         result[filename] = {
                             catID: 'DSGNRythm',
                             catShort: 'DSGN',
@@ -388,8 +479,7 @@ ${filenames.join('\n')}
                         };
                         console.log(`手动创建分类: ${filename} -> DSGNRythm`);
                     }
-                    // 对于科幻类型的音效，使用SCIMisc
-                    else if (filename.toLowerCase().includes('sci-fi')) {
+                    else if (lowerFilename.includes('sci-fi') || lowerFilename.includes('scifi') || lowerFilename.includes('科幻')) {
                         result[filename] = {
                             catID: 'SCIMisc',
                             catShort: 'SCI',
@@ -400,8 +490,7 @@ ${filenames.join('\n')}
                         };
                         console.log(`手动创建分类: ${filename} -> SCIMisc`);
                     }
-                    // 对于数字/电子类型的音效，使用DSGNSynth
-                    else if (filename.toLowerCase().includes('digital')) {
+                    else if (lowerFilename.includes('digital') || lowerFilename.includes('electronic') || lowerFilename.includes('电子')) {
                         result[filename] = {
                             catID: 'DSGNSynth',
                             catShort: 'DSGN',

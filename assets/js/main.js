@@ -345,6 +345,24 @@ function initNamingRuleSettings() {
         });
     }
 
+    // 从翻译服务获取命名风格设置
+    if (window.pluginState.translationService && window.pluginState.namingRules) {
+        try {
+            // 直接从翻译服务对象获取设置
+            const namingStyle = window.pluginState.translationService.settings.namingStyle || 'none';
+            const customSeparator = window.pluginState.translationService.settings.customSeparator || '_';
+
+            // 将命名风格设置同步到命名规则引擎
+            window.pluginState.namingRules.setSettings({
+                namingStyle: namingStyle,
+                customSeparator: customSeparator
+            });
+            console.log('已同步命名风格设置到命名规则引擎:', namingStyle);
+        } catch (error) {
+            console.error('同步命名风格设置失败:', error);
+        }
+    }
+
     // UCS命名元素复选框
     const elementIds = [
         'catID', 'category', 'category_zh', 'subCategory', 'subCategory_zh',

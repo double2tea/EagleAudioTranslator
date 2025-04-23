@@ -11,7 +11,6 @@ class CSVMatcher {
         this.terms = [];
         this.categories = [];
         this.loaded = false;
-        this.specialRules = [];
         this.aiClassifier = null; // AI辅助分类器
 
         // 匹配设置
@@ -36,20 +35,11 @@ class CSVMatcher {
             useAIClassification: false
         };
 
-        // 特殊规则设置
-        this.ruleSettings = {
-            defaultPriority: 10,
-            multiMatchStrategy: 'highestPriority' // 可选值: 'highestPriority', 'firstMatch', 'allMatches'
-        };
-
         // 确保路径有效
         if (!csvPath) {
             console.warn('CSV路径为空，使用默认路径 ./assets/data/categorylist.csv');
             csvPath = './assets/data/categorylist.csv';
         }
-
-        // 加载特殊规则
-        this.loadSpecialRules();
 
         // 加载CSV数据
         this.loadCSV(csvPath);
@@ -241,362 +231,449 @@ class CSVMatcher {
         return this;
     }
 
-    /**
-     * 加载特殊规则
-     */
-    loadSpecialRules() {
-        try {
-            var self = this;
-            // 使用XMLHttpRequest加载特殊规则配置文件，与fetch保持一致的加载方式
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', './assets/data/special-rules.json', true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        try {
-                            var data = JSON.parse(xhr.responseText);
-                            if (data) {
-                                // 加载规则设置
-                                if (data.settings) {
-                                    self.ruleSettings = Object.assign(self.ruleSettings, data.settings);
-                                    console.log('加载规则设置:', self.ruleSettings);
-                                }
 
-                                // 加载特殊规则
-                                if (data.specialPatterns) {
-                                    self.specialRules = data.specialPatterns;
-                                    console.log('特殊规则加载成功，共', self.specialRules.length, '条规则');
-
-                                    // 确保每个规则都有优先级
-                                    self.specialRules.forEach(rule => {
-                                        if (rule.priority === undefined) {
-                                            rule.priority = self.ruleSettings.defaultPriority;
-                                        }
-                                    });
-
-                                    // 按优先级排序，高优先级在前
-                                    self.specialRules.sort((a, b) => b.priority - a.priority);
-                                }
-                            }
-                        } catch (parseError) {
-                            console.error('解析特殊规则文件失败:', parseError);
-                            self.specialRules = [];
-                        }
-                    } else {
-                        console.error('加载特殊规则文件失败: HTTP ' + xhr.status);
-                        self.specialRules = [];
-                    }
-                }
-            };
-            xhr.send();
-        } catch (error) {
-            console.error('加载特殊规则出错:', error);
-            this.specialRules = [];
-        }
-    }
 
     /**
      * 查找匹配的术语
      * @param {string} text - 要匹配的文本
+     * @param {Array<Object>} [posAnalysis=null] - 词性分析结果，如果提供则使用分词系统进行匹配
      * @returns {Object|null} 匹配的术语或null
      */
-    findMatch(text) {
+    findMatch(text, posAnalysis = null) {
         if (!this.loaded || !text) {
             return null;
         }
 
-        // 转换为小写进行不区分大小写的匹配
-        var lowerText = text.toLowerCase();
-
-        // 收集所有可能的匹配结果
-        const matches = [];
-
-        // 1. 应用特殊规则
-        const specialMatch = this.applySpecialRules(lowerText);
-        if (specialMatch) {
-            // 处理数组结果（多规则匹配）
-            if (Array.isArray(specialMatch)) {
-                specialMatch.forEach(match => {
-                    matches.push({
-                        term: match,
-                        score: this.matchSettings.priorityWeights.exactMatch + 10, // 特殊规则优先级更高
-                        matchType: 'special_rule'
-                    });
-                });
-            }
-            // 处理单个结果
-            else {
-                matches.push({
-                    term: specialMatch,
-                    score: this.matchSettings.priorityWeights.exactMatch + 10, // 特殊规则优先级更高
-                    matchType: 'special_rule'
-                });
-            }
+        // 检查是否提供了词性分析结果
+        if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
+            // 使用分词系统进行匹配
+            return this.findMatchWithPosAnalysis(posAnalysis);
         }
 
-        // 2. 对于复合术语，尝试匹配多词短语
+        // 如果没有词性分析结果，尝试使用简单的分词方式
+        const lowerText = text.toLowerCase();
         const words = lowerText.split(/\s+/);
+
+        // 准备词汇信息列表
+        const wordInfoList = [];
+
+        // 对于单词，添加到词汇列表
         if (words.length > 1) {
-            for (var p = 0; p < this.terms.length; p++) {
-                const term = this.terms[p];
-                const termWords = term.source.toLowerCase().split(/\s+/);
-
-                // 检查是否是多词短语
-                if (termWords.length > 1) {
-                    const wordMatchResult = this._containsAllWords(lowerText, termWords);
-                    if (wordMatchResult.matched) {
-                        matches.push({
-                            term: term,
-                            score: wordMatchResult.score,
-                            matchType: 'multi_word_' + wordMatchResult.matchType
-                        });
-                    }
+            // 多词情况，将每个单词分开处理
+            words.forEach(word => {
+                if (word.length >= 2) { // 跳过过短的词
+                    wordInfoList.push({
+                        word: word,
+                        pos: 'noun', // 默认假设为名词，因为没有词性分析
+                        weight: 100,  // 默认权重
+                        source: 'original'
+                    });
                 }
-            }
-        }
-
-        // 3. 精确匹配
-        for (var i = 0; i < this.terms.length; i++) {
-            const term = this.terms[i];
-            if (term.source.toLowerCase() === lowerText) {
-                matches.push({
-                    term: term,
-                    score: this.matchSettings.priorityWeights.exactMatch,
-                    matchType: 'exact_match'
-                });
-            }
-        }
-
-        // 4. 包含匹配（按术语长度排序，优先匹配更长的术语）
-        const sortedTerms = this.terms.slice().sort((a, b) => {
-            return b.source.length - a.source.length;
-        });
-
-        for (var j = 0; j < sortedTerms.length; j++) {
-            const term = sortedTerms[j];
-            const termLower = term.source.toLowerCase();
-
-            // 跳过已经精确匹配的术语
-            if (termLower === lowerText) continue;
-
-            if (lowerText.indexOf(termLower) !== -1) {
-                // 计算分数，越长的术语分数越高
-                const lengthScore = (term.source.length / lowerText.length) * this.matchSettings.priorityWeights.containsMatch;
-                matches.push({
-                    term: term,
-                    score: lengthScore,
-                    matchType: 'contains_match'
-                });
-            }
-        }
-
-        // 5. 同义词匹配
-        for (var k = 0; k < this.terms.length; k++) {
-            const term = this.terms[k];
-            if (term.synonyms) {
-                const synonyms = term.synonyms.split(',').map(s => s.trim().toLowerCase())
-                    .sort((a, b) => b.length - a.length); // 按长度排序
-
-                for (var s = 0; s < synonyms.length; s++) {
-                    const synonym = synonyms[s];
-                    if (!synonym) continue;
-
-                    // 精确匹配同义词
-                    if (synonym === lowerText) {
-                        matches.push({
-                            term: term,
-                            score: this.matchSettings.priorityWeights.synonymMatch,
-                            matchType: 'synonym_exact'
-                        });
-                        break;
-                    }
-                    // 包含匹配同义词
-                    else if (lowerText.indexOf(synonym) !== -1) {
-                        // 计算分数，越长的同义词分数越高
-                        const lengthScore = (synonym.length / lowerText.length) * this.matchSettings.priorityWeights.synonymMatch;
-                        matches.push({
-                            term: term,
-                            score: lengthScore,
-                            matchType: 'synonym_contains'
-                        });
-                        break;
-                    }
-                }
-            }
-        }
-
-        // 6. 正则表达式匹配
-        // 从术语库中提取常见的音效关键词来生成正则表达式
-        const soundEffectKeywords = new Set();
-        const audioFileExtensions = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'alac', 'ape', 'opus', 'webm', 'mid', 'midi'];
-
-        // 从术语库中提取关键词
-        for (const term of this.terms) {
-            // 添加源术语
-            if (term.source && term.source.length > 3) {
-                soundEffectKeywords.add(term.source.toLowerCase());
-            }
-
-            // 从同义词中提取关键词
-            if (term.synonyms) {
-                const synonyms = term.synonyms.split(',').map(s => s.trim().toLowerCase());
-                for (const synonym of synonyms) {
-                    if (synonym && synonym.length > 3) {
-                        soundEffectKeywords.add(synonym);
-                    }
-                }
-            }
-        }
-
-        // 构建正则表达式模式
-        const regexPatterns = [
-            // 匹配带数字的版本号，如 "v1.2.3"
-            { pattern: /v\d+(\.\d+)*/, type: 'version' },
-            // 匹配常见的文件后缀
-            { pattern: new RegExp('\\.('+audioFileExtensions.join('|')+')\\b', 'i'), type: 'audio_file' }
-        ];
-
-        // 如果有足够的关键词，添加音效关键词正则表达式
-        if (soundEffectKeywords.size > 0) {
-            // 取前20个关键词构建正则表达式，避免正则表达式过长
-            const keywordsArray = Array.from(soundEffectKeywords).slice(0, 20);
-            regexPatterns.push({
-                pattern: new RegExp('\\b('+keywordsArray.join('|')+')\\b', 'i'),
-                type: 'sound_effect'
+            });
+        } else if (words.length === 1 && words[0].length >= 2) {
+            // 单词情况
+            wordInfoList.push({
+                word: words[0],
+                pos: 'noun', // 默认假设为名词
+                weight: 100,  // 默认权重
+                source: 'original'
             });
         }
 
-        for (const regexObj of regexPatterns) {
-            if (regexObj.pattern.test(lowerText)) {
-                // 如果正则表达式匹配，尝试找到相关的术语
-                for (const term of this.terms) {
-                    // 对于音效关键词，检查是否在正则表达式中匹配
-                    if (regexObj.type === 'sound_effect') {
-                        const match = lowerText.match(regexObj.pattern);
-                        if (match && match[1] &&
-                            (term.source.toLowerCase().includes(match[1]) ||
-                             (term.synonyms && term.synonyms.toLowerCase().includes(match[1])))) {
-                            matches.push({
-                                term: term,
-                                score: this.matchSettings.priorityWeights.regexMatch,
-                                matchType: 'regex_' + regexObj.type
-                            });
-                            break;
-                        }
+        // 如果没有有效的词汇，尝试使用整个文本作为一个词汇
+        if (wordInfoList.length === 0 && text.length >= 2) {
+            wordInfoList.push({
+                word: lowerText,
+                pos: 'noun',
+                weight: 100,
+                source: 'original'
+            });
+        }
+
+        // 使用通用匹配算法
+        const result = this._universalMatchingAlgorithm(wordInfoList, 0);
+
+        if (result) {
+            console.log('基于文本的匹配成功:', result.matchType, '分数:', result.score);
+            return result.term;
+        }
+
+        // 如果通用算法失败，尝试精确匹配
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            if (term.source.toLowerCase() === lowerText) {
+                console.log('使用精确匹配成功:', lowerText);
+                return term;
+            }
+        }
+
+        // 如果精确匹配也失败，尝试同义词匹配
+        for (let i = 0; i < this.terms.length; i++) {
+            const term = this.terms[i];
+            if (term.synonyms) {
+                const synonyms = term.synonyms.split(',').map(s => s.trim().toLowerCase());
+                for (const synonym of synonyms) {
+                    if (synonym === lowerText) {
+                        console.log('使用同义词精确匹配成功:', lowerText);
+                        return term;
                     }
-                    // 对于其他类型，使用原来的匹配方式
-                    else if (term.source.toLowerCase().includes(regexObj.type)) {
-                        matches.push({
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 基于词性分析结果进行匹配
+     * @param {Array<Object>} posAnalysis - 词性分析结果
+     * @returns {Object|null} 匹配的术语或null
+     */
+    findMatchWithPosAnalysis(posAnalysis) {
+        if (!this.loaded || !posAnalysis || !Array.isArray(posAnalysis) || posAnalysis.length === 0) {
+            return null;
+        }
+
+        console.log('使用分词系统进行匹配，词性分析结果:', posAnalysis);
+
+        // 准备词汇信息列表
+        const wordInfoList = posAnalysis.map(item => ({
+            word: item.word,
+            pos: item.pos,
+            weight: item.weight,
+            source: 'original' // 单语匹配时默认为原始文本
+        }));
+
+        // 使用通用匹配算法
+        const result = this._universalMatchingAlgorithm(wordInfoList, 0);
+
+        if (result) {
+            console.log('基于词性分析的匹配成功:', result.matchType, '分数:', result.score);
+            return result.term;
+        }
+
+        console.log('基于词性分析的匹配未找到结果');
+        return null;
+    }
+
+    /**
+     * 使用双语匹配方法
+     * @param {string} originalText - 原始文本（中文）
+     * @param {string} translatedText - 翻译文本（英文）
+     * @param {Array<Object>} originalPosAnalysis - 原始文本的词性分析结果
+     * @param {Array<Object>} translatedPosAnalysis - 翻译文本的词性分析结果
+     * @returns {Object|null} 匹配的术语或null
+     */
+    findMatchWithBilingualText(originalText, translatedText, originalPosAnalysis, translatedPosAnalysis) {
+        if (!this.loaded || (!originalText && !translatedText)) {
+            return null;
+        }
+
+        console.log('使用双语匹配方法:', {
+            originalText,
+            translatedText,
+            originalPosAnalysis,
+            translatedPosAnalysis
+        });
+
+        // 收集所有分词后的词汇
+        const allWords = [];
+
+        // 收集中文词汇
+        if (originalPosAnalysis && originalPosAnalysis.length > 0) {
+            originalPosAnalysis.forEach(item => {
+                allWords.push({
+                    word: item.word,
+                    pos: item.pos,
+                    weight: item.weight,
+                    source: 'original'
+                });
+            });
+        }
+
+        // 收集英文词汇
+        if (translatedPosAnalysis && translatedPosAnalysis.length > 0) {
+            translatedPosAnalysis.forEach(item => {
+                allWords.push({
+                    word: item.word,
+                    pos: item.pos,
+                    weight: item.weight,
+                    source: 'translated'
+                });
+            });
+        }
+
+        // 如果没有词汇，返回null
+        if (allWords.length === 0) {
+            console.log('双语匹配未找到词汇');
+            return null;
+        }
+
+        // 使用通用匹配算法
+        const result = this._universalMatchingAlgorithm(allWords, 0);
+
+        if (result) {
+            console.log('双语匹配成功:', originalText, '->', result.term.catID);
+            return result.term;
+        }
+
+        return null;
+    }
+
+
+
+    /**
+     * 通用匹配算法 - 基于词汇计数和词性排序
+     * @param {Array<Object>} wordInfoList - 词汇信息列表，每个对象包含 word、pos、weight 和 source 属性
+     * @param {number} [resultRank=0] - 返回结果的排名，0表示最佳匹配，1表示第二佳匹配，以此类推
+     * @param {boolean} [returnAllMatches=false] - 是否返回所有匹配结果
+     * @returns {Object|Array|null} 指定排名的匹配结果、所有匹配结果数组或null
+     * @private
+     */
+    _universalMatchingAlgorithm(wordInfoList, resultRank = 0, returnAllMatches = false) {
+        if (!this.loaded || !wordInfoList || wordInfoList.length === 0) {
+            return null;
+        }
+
+        // 对每个术语进行匹配计数
+        const termMatchCounts = {};
+        const termMatchDetails = {};
+
+        // 对每个词汇进行匹配
+        for (const wordInfo of wordInfoList) {
+            for (let i = 0; i < this.terms.length; i++) {
+                const term = this.terms[i];
+                const termSource = term.source.toLowerCase();
+                const termSynonyms = term.synonyms ? term.synonyms.toLowerCase() : '';
+
+                // 使用更精确的匹配方式，确保单词边界
+                const wordRegex = new RegExp(`\\b${wordInfo.word}\\b`, 'i');
+                if (wordRegex.test(termSource) || wordRegex.test(termSynonyms)) {
+                    // 初始化计数器
+                    if (!termMatchCounts[term.catID]) {
+                        termMatchCounts[term.catID] = 0;
+                        termMatchDetails[term.catID] = {
                             term: term,
-                            score: this.matchSettings.priorityWeights.regexMatch,
-                            matchType: 'regex_' + regexObj.type
-                        });
-                        break;
+                            matches: [],
+                            posScores: {
+                                noun: 0,
+                                verb: 0,
+                                adjective: 0,
+                                adverb: 0,
+                                other: 0
+                            }
+                        };
+                    }
+
+                    // 增加匹配计数
+                    termMatchCounts[term.catID]++;
+
+                    // 记录匹配详情
+                    termMatchDetails[term.catID].matches.push({
+                        word: wordInfo.word,
+                        pos: wordInfo.pos,
+                        weight: wordInfo.weight,
+                        source: wordInfo.source
+                    });
+
+                    // 根据词性增加分数
+                    if (wordInfo.pos === 'noun') {
+                        termMatchDetails[term.catID].posScores.noun += wordInfo.weight;
+                    } else if (wordInfo.pos === 'verb') {
+                        termMatchDetails[term.catID].posScores.verb += wordInfo.weight;
+                    } else if (wordInfo.pos === 'adjective') {
+                        termMatchDetails[term.catID].posScores.adjective += wordInfo.weight;
+                    } else if (wordInfo.pos === 'adverb') {
+                        termMatchDetails[term.catID].posScores.adverb += wordInfo.weight;
+                    } else {
+                        termMatchDetails[term.catID].posScores.other += wordInfo.weight;
                     }
                 }
             }
         }
 
         // 如果没有匹配结果，返回null
-        if (matches.length === 0) {
+        if (Object.keys(termMatchCounts).length === 0) {
             return null;
         }
 
-        // 根据多匹配策略处理结果
-        switch (this.matchSettings.multiMatchStrategy) {
-            case 'firstMatch':
-                // 返回第一个匹配结果
-                console.log('使用首次匹配策略，返回第一个匹配:', matches[0].matchType);
-                return matches[0].term;
+        // 找出匹配次数最多的术语
+        let maxCount = 0;
+        let bestMatches = [];
 
-            case 'allMatches':
-                // 返回所有匹配结果
-                console.log('使用所有匹配策略，返回', matches.length, '个匹配');
-                return matches.map(match => match.term);
-
-            case 'highestPriority':
-            default:
-                // 按分数排序，返回分数最高的匹配结果
-                matches.sort((a, b) => b.score - a.score);
-                const bestMatch = matches[0];
-                console.log('使用最高优先级策略，选择匹配:', bestMatch.matchType, '分数:', bestMatch.score);
-                return bestMatch.term;
-        }
-    }
-
-    /**
-     * 应用特殊规则
-     * @param {string} lowerText - 小写的文本
-     * @returns {Object|Array|null} 匹配的结果或null
-     */
-    applySpecialRules(lowerText) {
-        if (!this.specialRules || this.specialRules.length === 0) {
-            return null;
-        }
-
-        // 收集所有匹配的规则
-        const matchedRules = [];
-
-        for (const rule of this.specialRules) {
-            let isMatch = false;
-
-            if (rule.matchType === 'contains' && lowerText.includes(rule.pattern)) {
-                isMatch = true;
-            } else if (rule.matchType === 'startsWith' && lowerText.startsWith(rule.pattern)) {
-                isMatch = true;
-            } else if (rule.matchType === 'equals' && lowerText === rule.pattern) {
-                isMatch = true;
-            } else if (rule.matchType === 'regex') {
-                try {
-                    const regex = new RegExp(rule.pattern, 'i');
-                    if (regex.test(lowerText)) {
-                        isMatch = true;
-                    }
-                } catch (error) {
-                    console.error('正则表达式错误:', error);
-                }
+        for (const catID in termMatchCounts) {
+            const count = termMatchCounts[catID];
+            if (count > maxCount) {
+                maxCount = count;
+                bestMatches = [catID];
+            } else if (count === maxCount) {
+                bestMatches.push(catID);
             }
+        }
 
-            if (isMatch) {
-                matchedRules.push({
-                    rule: rule,
-                    priority: rule.priority || this.ruleSettings.defaultPriority
+        // 如果有多个匹配次数相同的术语，按词性排序
+        if (bestMatches.length > 1) {
+            // 按名词分数排序，名词分数高的优先
+            bestMatches.sort((a, b) => {
+                const aDetails = termMatchDetails[a];
+                const bDetails = termMatchDetails[b];
+
+                // 首先比较名词分数
+                if (aDetails.posScores.noun !== bDetails.posScores.noun) {
+                    return bDetails.posScores.noun - aDetails.posScores.noun;
+                }
+
+                // 如果名词分数相同，比较动词分数
+                if (aDetails.posScores.verb !== bDetails.posScores.verb) {
+                    return bDetails.posScores.verb - aDetails.posScores.verb;
+                }
+
+                // 如果动词分数相同，比较形容词分数
+                if (aDetails.posScores.adjective !== bDetails.posScores.adjective) {
+                    return bDetails.posScores.adjective - aDetails.posScores.adjective;
+                }
+
+                // 如果形容词分数相同，比较副词分数
+                if (aDetails.posScores.adverb !== bDetails.posScores.adverb) {
+                    return bDetails.posScores.adverb - aDetails.posScores.adverb;
+                }
+
+                // 如果所有词性分数都相同，比较其他分数
+                return bDetails.posScores.other - aDetails.posScores.other;
+            });
+        }
+
+        // 如果要求返回所有匹配结果
+        if (returnAllMatches) {
+            // 准备所有匹配结果
+            const allResults = [];
+
+            // 处理每个匹配结果
+            for (let i = 0; i < bestMatches.length; i++) {
+                const matchCatID = bestMatches[i];
+                const matchDetails = termMatchDetails[matchCatID];
+
+                // 计算匹配类型
+                let matchType = 'universal_';
+
+                // 添加来源信息
+                const hasChinese = matchDetails.matches.some(m => m.source === 'original');
+                const hasEnglish = matchDetails.matches.some(m => m.source === 'translated');
+
+                if (hasChinese && hasEnglish) {
+                    matchType += 'bilingual_';
+                } else if (hasChinese) {
+                    matchType += 'chinese_';
+                } else {
+                    matchType += 'english_';
+                }
+
+                // 添加词性信息
+                if (matchDetails.posScores.noun > 0) {
+                    matchType += 'noun';
+                } else if (matchDetails.posScores.verb > 0) {
+                    matchType += 'verb';
+                } else if (matchDetails.posScores.adjective > 0) {
+                    matchType += 'adjective';
+                } else {
+                    matchType += 'other';
+                }
+
+                // 计算总分数
+                const totalScore = matchDetails.posScores.noun +
+                                  matchDetails.posScores.verb +
+                                  matchDetails.posScores.adjective +
+                                  matchDetails.posScores.adverb +
+                                  matchDetails.posScores.other;
+
+                // 添加到结果数组
+                allResults.push({
+                    term: matchDetails.term,
+                    matchType: matchType,
+                    score: totalScore,
+                    rank: i
                 });
+            }
 
-                // 如果策略是首次匹配，直接返回第一个匹配的规则
-                if (this.ruleSettings.multiMatchStrategy === 'firstMatch') {
-                    console.log('使用首次匹配策略，返回第一个匹配的规则:', rule.id);
-                    return rule.result;
-                }
+            console.log(`返回所有 ${allResults.length} 个匹配结果`);
+            return allResults;
+        }
+
+        // 如果只返回指定排名的结果
+        // 检查是否请求的排名超出了可用的匹配结果范围
+        if (resultRank >= bestMatches.length) {
+            console.log(`请求的排名 ${resultRank} 超出了可用的匹配结果范围 (${bestMatches.length})`);
+            // 如果有至少一个匹配结果，返回最后一个可用的匹配结果
+            if (bestMatches.length > 0) {
+                resultRank = bestMatches.length - 1;
+                console.log(`返回最后一个可用的匹配结果（排名 ${resultRank}）`);
+            } else {
+                return null;
             }
         }
 
-        // 如果没有匹配的规则，返回null
-        if (matchedRules.length === 0) {
-            return null;
+        // 获取指定排名的匹配结果
+        const selectedMatchCatID = bestMatches[resultRank];
+        const selectedMatchDetails = termMatchDetails[selectedMatchCatID];
+
+        // 计算匹配类型
+        let matchType = 'universal_';
+
+        // 添加来源信息
+        const hasChinese = selectedMatchDetails.matches.some(m => m.source === 'original');
+        const hasEnglish = selectedMatchDetails.matches.some(m => m.source === 'translated');
+
+        if (hasChinese && hasEnglish) {
+            matchType += 'bilingual_';
+        } else if (hasChinese) {
+            matchType += 'chinese_';
+        } else {
+            matchType += 'english_';
         }
 
-        // 如果策略是所有匹配，返回所有匹配的规则结果
-        if (this.ruleSettings.multiMatchStrategy === 'allMatches') {
-            console.log('使用所有匹配策略，返回', matchedRules.length, '个匹配的规则');
-            return matchedRules.map(match => match.rule.result);
+        // 添加词性信息
+        if (selectedMatchDetails.posScores.noun > 0) {
+            matchType += 'noun';
+        } else if (selectedMatchDetails.posScores.verb > 0) {
+            matchType += 'verb';
+        } else if (selectedMatchDetails.posScores.adjective > 0) {
+            matchType += 'adjective';
+        } else {
+            matchType += 'other';
         }
 
-        // 默认策略：最高优先级
-        // 按优先级排序，高优先级在前
-        matchedRules.sort((a, b) => b.priority - a.priority);
-        const highestPriorityRule = matchedRules[0].rule;
-        console.log('使用最高优先级策略，选择规则:', highestPriorityRule.id, '优先级:', highestPriorityRule.priority);
-        return highestPriorityRule.result;
+        // 计算总分数
+        const totalScore = selectedMatchDetails.posScores.noun +
+                          selectedMatchDetails.posScores.verb +
+                          selectedMatchDetails.posScores.adjective +
+                          selectedMatchDetails.posScores.adverb +
+                          selectedMatchDetails.posScores.other;
+
+        // 根据排名显示不同的日志信息
+        if (resultRank === 0) {
+            console.log('通用匹配算法最佳结果:', matchType, '分数:', totalScore, 'CatID:', selectedMatchCatID);
+        } else {
+            console.log(`通用匹配算法第 ${resultRank+1} 佳结果:`, matchType, '分数:', totalScore, 'CatID:', selectedMatchCatID);
+        }
+
+        return {
+            term: selectedMatchDetails.term,
+            matchType: matchType,
+            score: totalScore,
+            rank: resultRank,
+            availableMatchCount: bestMatches.length // 返回可用的匹配结果数量
+        };
     }
 
     /**
      * 识别文本的分类
      * @param {string} text - 要识别的文本
      * @param {Object} translationProvider - 翻译服务提供者（用于AI辅助分类）
+     * @param {Array<Object>} [posAnalysis=null] - 词性分析结果，如果提供则使用分词系统进行匹配
+     * @param {Object} [options=null] - 额外选项，如翻译文本和其词性分析结果
      * @returns {Promise<string>} 分类名称或空字符串
      */
-    async identifyCategory(text, translationProvider = null) {
+    async identifyCategory(text, translationProvider = null, posAnalysis = null, options = null) {
         if (!this.loaded || !text) {
             return '';
         }
@@ -617,8 +694,24 @@ class CSVMatcher {
             }
         }
 
-        // 直接使用改进后的findMatch方法来获取最佳匹配结果
-        const match = this.findMatch(text);
+        // 检查是否提供了双语匹配选项
+        if (options && options.translatedText) {
+            // 使用双语匹配方法
+            const bilingualMatch = this.findMatchWithBilingualText(
+                text,
+                options.translatedText,
+                posAnalysis,
+                options.translatedPosAnalysis
+            );
+
+            if (bilingualMatch) {
+                console.log('使用双语匹配成功:', text, '->', bilingualMatch.catID);
+                return bilingualMatch.catID;
+            }
+        }
+
+        // 使用findMatch方法来获取匹配结果
+        const match = this.findMatch(text, posAnalysis);
 
         // 如果有匹配结果并且包含分类信息
         if (match) {
@@ -788,6 +881,26 @@ class CSVMatcher {
     }
 
     /**
+     * 检查CatID是否有效（在CSV表格中存在）
+     * @param {string} catID - 要检查的CatID
+     * @returns {boolean} 是否有效
+     */
+    isValidCatID(catID) {
+        if (!this.loaded || !catID) {
+            return false;
+        }
+
+        // 检查CatID是否在CSV表格中存在
+        for (let i = 0; i < this.terms.length; i++) {
+            if (this.terms[i].catID === catID) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * 根据关键词部分匹配术语
      * @param {string} keyword - 要匹配的关键词
      * @returns {Object|null} 匹配的术语或null
@@ -870,140 +983,136 @@ class CSVMatcher {
         return bestMatch.term;
     }
 
+
+
+
+
+
+
+
+
     /**
-     * 检查文本是否包含指定的单词
-     * @param {string} text - 要检查的文本
-     * @param {Array<string>} words - 要检查的单词数组
-     * @returns {Object} 包含匹配结果和匹配分数
-     * @private
+     * 根据CatID查找术语
+     * @param {string} catID - 要查找的CatID
+     * @returns {Object|null} 找到的术语或null
      */
-    _containsAllWords(text, words) {
-        if (!text || !words || words.length === 0) {
-            return { matched: false, score: 0 };
+    findTermByCatID(catID) {
+        if (!this.loaded || !catID) {
+            return null;
         }
 
-        // 根据多词匹配策略选择匹配方式
-        switch (this.matchSettings.multiWordMatchStrategy) {
-            case 'exact':
-                return this._exactWordMatch(text, words);
-            case 'fuzzy':
-                return this._fuzzyWordMatch(text, words);
-            case 'partial':
-            default:
-                return this._partialWordMatch(text, words);
+        // 检查是否在术语库中存在
+        for (let i = 0; i < this.terms.length; i++) {
+            if (this.terms[i].catID === catID) {
+                return this.terms[i];
+            }
         }
+
+        console.warn(`CatID "${catID}" 在CSV表格中不存在`);
+        return null;
     }
 
     /**
-     * 精确匹配 - 要求完全匹配短语
-     * @param {string} text - 要检查的文本
-     * @param {Array<string>} words - 要检查的单词数组
-     * @returns {Object} 匹配结果和分数
-     * @private
+     * 获取所有可能的匹配结果
+     * @param {string} text - 要匹配的文本
+     * @param {Array<Object>} [posAnalysis=null] - 词性分析结果，如果提供则使用分词系统进行匹配
+     * @param {Object} [options=null] - 额外选项，如翻译文本和其词性分析结果
+     * @returns {Array} 所有匹配结果的数组
      */
-    _exactWordMatch(text, words) {
-        const phrase = words.join(' ');
-        const matched = text.includes(phrase);
-        return {
-            matched: matched,
-            score: matched ? this.matchSettings.priorityWeights.multiWordMatch : 0,
-            matchType: 'exact'
-        };
-    }
-
-    /**
-     * 部分匹配 - 允许单词之间有其他文本
-     * @param {string} text - 要检查的文本
-     * @param {Array<string>} words - 要检查的单词数组
-     * @returns {Object} 匹配结果和分数
-     * @private
-     */
-    _partialWordMatch(text, words) {
-        // 先尝试精确匹配
-        const exactMatch = this._exactWordMatch(text, words);
-        if (exactMatch.matched) {
-            return exactMatch;
+    getAllMatches(text, posAnalysis = null, options = null) {
+        if (!this.loaded || !text) {
+            return [];
         }
 
-        // 如果精确匹配失败，尝试部分匹配
-        let allWordsFound = true;
-        let lastIndex = -1;
-        let score = 0;
-        const respectOrder = this.matchSettings.respectWordOrder;
+        // 检查是否提供了双语匹配选项
+        if (options && options.translatedText) {
+            // 准备词汇信息列表
+            const wordInfoList = [];
 
-        // 检查每个单词是否存在于文本中
-        for (let i = 0; i < words.length; i++) {
-            const word = words[i];
-            const index = text.indexOf(word);
-
-            if (index === -1) {
-                // 单词不存在
-                allWordsFound = false;
-                break;
-            } else if (respectOrder && index < lastIndex) {
-                // 如果要求顺序一致，但当前单词在前一个单词之前出现
-                allWordsFound = false;
-                break;
+            // 收集原始文本的词汇
+            if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
+                posAnalysis.forEach(item => {
+                    wordInfoList.push({
+                        word: item.word,
+                        pos: item.pos,
+                        weight: item.weight,
+                        source: 'original'
+                    });
+                });
             }
 
-            lastIndex = index;
-            // 每找到一个单词增加分数
-            score += (this.matchSettings.priorityWeights.partialMatch / words.length);
+            // 收集翻译文本的词汇
+            if (options.translatedPosAnalysis && Array.isArray(options.translatedPosAnalysis) && options.translatedPosAnalysis.length > 0) {
+                options.translatedPosAnalysis.forEach(item => {
+                    wordInfoList.push({
+                        word: item.word,
+                        pos: item.pos,
+                        weight: item.weight,
+                        source: 'translated'
+                    });
+                });
+            }
+
+            // 使用通用匹配算法获取所有匹配结果
+            return this._universalMatchingAlgorithm(wordInfoList, 0, true) || [];
         }
 
-        return {
-            matched: allWordsFound,
-            score: allWordsFound ? score : 0,
-            matchType: 'partial'
-        };
-    }
+        // 如果没有双语选项，使用普通匹配
+        if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
+            // 准备词汇信息列表
+            const wordInfoList = posAnalysis.map(item => ({
+                word: item.word,
+                pos: item.pos,
+                weight: item.weight,
+                source: 'original'
+            }));
 
-    /**
-     * 模糊匹配 - 允许单词的变形和部分匹配
-     * @param {string} text - 要检查的文本
-     * @param {Array<string>} words - 要检查的单词数组
-     * @returns {Object} 匹配结果和分数
-     * @private
-     */
-    _fuzzyWordMatch(text, words) {
-        // 先尝试精确匹配和部分匹配
-        const exactMatch = this._exactWordMatch(text, words);
-        if (exactMatch.matched) {
-            return exactMatch;
+            // 使用通用匹配算法获取所有匹配结果
+            return this._universalMatchingAlgorithm(wordInfoList, 0, true) || [];
         }
 
-        const partialMatch = this._partialWordMatch(text, words);
-        if (partialMatch.matched) {
-            return partialMatch;
-        }
+        // 如果没有词性分析结果，尝试使用简单的分词方式
+        const lowerText = text.toLowerCase();
+        const words = lowerText.split(/\s+/);
 
-        // 如果前两种匹配失败，尝试模糊匹配
-        let matchedWords = 0;
-        let score = 0;
+        // 准备词汇信息列表
+        const wordInfoList = [];
 
-        // 对每个单词进行模糊匹配
-        for (let i = 0; i < words.length; i++) {
-            const word = words[i];
-            // 检查文本中是否包含单词的一部分（至少三个字符）
-            if (word.length >= 3) {
-                for (let j = 0; j <= text.length - 3; j++) {
-                    // 检查文本的每个位置是否包含单词的前三个字符
-                    if (text.substring(j, j + 3).toLowerCase() === word.substring(0, 3).toLowerCase()) {
-                        matchedWords++;
-                        score += (this.matchSettings.priorityWeights.partialMatch / (2 * words.length));
-                        break;
-                    }
+        // 对于单词，添加到词汇列表
+        if (words.length > 1) {
+            // 多词情况，将每个单词分开处理
+            words.forEach(word => {
+                if (word.length >= 2) { // 跳过过短的词
+                    wordInfoList.push({
+                        word: word,
+                        pos: 'noun', // 默认假设为名词，因为没有词性分析
+                        weight: 100,  // 默认权重
+                        source: 'original'
+                    });
                 }
-            }
+            });
+        } else if (words.length === 1 && words[0].length >= 2) {
+            // 单词情况
+            wordInfoList.push({
+                word: words[0],
+                pos: 'noun', // 默认假设为名词
+                weight: 100,  // 默认权重
+                source: 'original'
+            });
         }
 
-        // 如果至少匹配了一半的单词，则认为是模糊匹配成功
-        const threshold = Math.ceil(words.length / 2);
-        return {
-            matched: matchedWords >= threshold,
-            score: matchedWords >= threshold ? score : 0,
-            matchType: 'fuzzy'
-        };
+        // 如果没有有效的词汇，尝试使用整个文本作为一个词汇
+        if (wordInfoList.length === 0 && text.length >= 2) {
+            wordInfoList.push({
+                word: lowerText,
+                pos: 'noun',
+                weight: 100,
+                source: 'original'
+            });
+        }
+
+        // 使用通用匹配算法获取所有匹配结果
+        return this._universalMatchingAlgorithm(wordInfoList, 0, true) || [];
     }
 
     /**
@@ -1021,11 +1130,6 @@ class CSVMatcher {
             if (this.terms[i].catID === catID) {
                 return true;
             }
-        }
-
-        // 特殊处理一些Glitch类型的音效
-        if (catID === 'DSGNRythm') {
-            return true;
         }
 
         console.warn(`CatID "${catID}" 在CSV表格中不存在`);

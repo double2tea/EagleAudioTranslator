@@ -17,7 +17,9 @@ class TranslationPanel {
             useCSV: true,
             standardizeEnglish: false,
             namingStyle: 'none',
-            customSeparator: '_'
+            customSeparator: '_',
+            matchStrategy: 'auto',
+            useAIClassification: false
         };
 
         // 初始化事件监听器
@@ -112,6 +114,48 @@ class TranslationPanel {
             });
         }
 
+        // AI辅助分类开关
+        const useAIClassificationCheckbox = document.getElementById('useAIClassification');
+        if (useAIClassificationCheckbox) {
+            useAIClassificationCheckbox.addEventListener('change', () => {
+                this.settings.useAIClassification = useAIClassificationCheckbox.checked;
+                this._saveSettings();
+
+                // 如果启用了AI辅助分类，更新到分类器
+                if (window.pluginState && window.pluginState.smartClassifier) {
+                    try {
+                        window.pluginState.smartClassifier.classificationSettings.useAIClassification =
+                            useAIClassificationCheckbox.checked;
+                        console.log('已更新AI辅助分类设置:', useAIClassificationCheckbox.checked);
+                    } catch (error) {
+                        console.error('更新AI辅助分类设置失败:', error);
+                    }
+                }
+            });
+        }
+
+        // 匹配策略选择
+        const matchStrategySelect = document.getElementById('matchStrategy');
+        if (matchStrategySelect) {
+            matchStrategySelect.addEventListener('change', () => {
+                this.settings.matchStrategy = matchStrategySelect.value;
+                this._saveSettings();
+
+                // 更新到分类器
+                if (window.pluginState && window.pluginState.smartClassifier) {
+                    try {
+                        window.pluginState.smartClassifier.classificationSettings.defaultMatchStrategy =
+                            matchStrategySelect.value;
+                        console.log('已更新匹配策略设置:', matchStrategySelect.value);
+                    } catch (error) {
+                        console.error('更新匹配策略设置失败:', error);
+                    }
+                }
+            });
+        }
+
+
+
         // 英文标准化开关
         const standardizeEnglishCheckbox = document.getElementById('standardizeEnglish');
         if (standardizeEnglishCheckbox) {
@@ -136,6 +180,22 @@ class TranslationPanel {
                 this._saveSettings();
                 this.translationService.setNamingStyle(namingStyleSelect.value);
 
+                // 同步命名风格设置到命名规则引擎
+                try {
+                    if (window.pluginState && window.pluginState.namingRules) {
+                        window.pluginState.namingRules.setSettings({
+                            namingStyle: namingStyleSelect.value
+                        });
+                        console.log('已同步命名风格设置到命名规则引擎:', namingStyleSelect.value);
+                        // 更新命名预览
+                        if (typeof updateNamingPreview === 'function') {
+                            updateNamingPreview();
+                        }
+                    }
+                } catch (error) {
+                    console.error('同步命名风格设置失败:', error);
+                }
+
                 // 如果选择了自定义分隔符，显示自定义分隔符输入框
                 const customSeparatorContainer = document.getElementById('customSeparatorContainer');
                 if (customSeparatorContainer) {
@@ -151,6 +211,22 @@ class TranslationPanel {
                 this.settings.customSeparator = customSeparatorInput.value;
                 this._saveSettings();
                 this.translationService.setCustomSeparator(customSeparatorInput.value);
+
+                // 同步自定义分隔符设置到命名规则引擎
+                try {
+                    if (window.pluginState && window.pluginState.namingRules) {
+                        window.pluginState.namingRules.setSettings({
+                            customSeparator: customSeparatorInput.value
+                        });
+                        console.log('已同步自定义分隔符设置到命名规则引擎:', customSeparatorInput.value);
+                        // 更新命名预览
+                        if (typeof updateNamingPreview === 'function') {
+                            updateNamingPreview();
+                        }
+                    }
+                } catch (error) {
+                    console.error('同步自定义分隔符设置失败:', error);
+                }
             });
         }
     }
@@ -172,6 +248,23 @@ class TranslationPanel {
 
             // 更新翻译服务设置
             this.translationService.setSettings(this.settings);
+
+            // 同步命名风格设置到命名规则引擎
+            try {
+                if (window.pluginState && window.pluginState.namingRules) {
+                    window.pluginState.namingRules.setSettings({
+                        namingStyle: this.settings.namingStyle || 'none',
+                        customSeparator: this.settings.customSeparator || '_'
+                    });
+                    console.log('加载设置时同步命名风格到命名规则引擎:', this.settings.namingStyle);
+                    // 更新命名预览
+                    if (typeof updateNamingPreview === 'function') {
+                        updateNamingPreview();
+                    }
+                }
+            } catch (error) {
+                console.error('加载设置时同步命名风格失败:', error);
+            }
 
             Logger.info('已加载翻译设置', this.settings);
         } catch (error) {
@@ -232,6 +325,20 @@ class TranslationPanel {
         if (useCSVCheckbox) {
             useCSVCheckbox.checked = this.settings.useCSV;
         }
+
+        // 更新AI辅助分类开关
+        const useAIClassificationCheckbox = document.getElementById('useAIClassification');
+        if (useAIClassificationCheckbox) {
+            useAIClassificationCheckbox.checked = this.settings.useAIClassification;
+        }
+
+        // 更新匹配策略选择
+        const matchStrategySelect = document.getElementById('matchStrategy');
+        if (matchStrategySelect) {
+            matchStrategySelect.value = this.settings.matchStrategy || 'auto';
+        }
+
+
 
         // 更新英文标准化开关
         const standardizeEnglishCheckbox = document.getElementById('standardizeEnglish');
@@ -502,6 +609,26 @@ class TranslationPanel {
             alert(`显示提示词预览失败: ${error.message}`);
         }
     }
+
+    /**
+     * 显示错误消息
+     * @param {string} message - 错误消息
+     * @private
+     */
+    _showError(message) {
+        const errorContainer = document.getElementById('errorContainer');
+        if (errorContainer) {
+            errorContainer.textContent = message;
+            errorContainer.style.display = 'block';
+
+            // 5秒后自动隐藏错误消息
+            setTimeout(() => {
+                errorContainer.style.display = 'none';
+            }, 5000);
+        }
+    }
+
+
 }
 
 // 导出TranslationPanel

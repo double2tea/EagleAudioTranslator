@@ -1,3 +1,4 @@
+
 /**
  * 翻译服务
  * 用于管理和使用多个翻译提供者
@@ -103,11 +104,12 @@ class TranslationService {
 
     /**
      * 注册翻译提供者
-     * @param {TranslationProvider} provider - 翻译提供者实例
+     * @param {Object} provider - 翻译提供者实例
      */
     registerProvider(provider) {
-        if (!(provider instanceof TranslationProvider)) {
-            throw new Error('提供者必须实现TranslationProvider接口');
+        // 检查提供者是否实现了必要的方法
+        if (!provider || typeof provider.getId !== 'function' || typeof provider.getName !== 'function' || typeof provider.translate !== 'function') {
+            throw new Error('提供者必须实现必要的接口方法');
         }
 
         this.providers[provider.getId()] = provider;
@@ -130,7 +132,7 @@ class TranslationService {
 
     /**
      * 获取所有注册的提供者
-     * @returns {Array<TranslationProvider>} 提供者列表
+     * @returns {Array<Object>} 提供者列表
      */
     getProviders() {
         return Object.values(this.providers);
@@ -314,14 +316,17 @@ class TranslationService {
     formatText(text) {
         if (!text) return text;
 
+        // 先清理文本，移除多余空格
+        let cleanedText = text.replace(/\s+/g, ' ').trim();
+
         // 如果提供者支持格式化方法，则使用提供者的方法
         if (this.activeProvider && typeof this.activeProvider.formatText === 'function') {
-            return this.activeProvider.formatText(text, this.settings.namingStyle, this.settings.customSeparator);
+            return this.activeProvider.formatText(cleanedText, this.settings.namingStyle, this.settings.customSeparator);
         }
 
         // 否则使用默认实现
-        // 先将文本分割成单词
-        const words = text.trim().split(/\s+/);
+        // 分割单词
+        const words = cleanedText.split(/\s+/);
 
         switch (this.settings.namingStyle) {
             case 'camelCase':
@@ -348,7 +353,7 @@ class TranslationService {
 
             case 'none':
             default:
-                return text;
+                return cleanedText; // 返回清理后的文本，而不是原始文本
         }
     }
 
@@ -507,7 +512,7 @@ class TranslationService {
 
     /**
      * 获取当前活动的提供者实例
-     * @returns {TranslationProvider} 提供者实例
+     * @returns {Object} 提供者实例
      */
     getActiveProvider() {
         return this.activeProvider;
@@ -560,6 +565,14 @@ class TranslationService {
     setCustomSeparator(separator) {
         this.settings.customSeparator = separator;
         Logger.info(`已设置自定义分隔符: ${separator}`);
+    }
+
+    /**
+     * 获取当前翻译服务的设置
+     * @returns {Object} 翻译设置
+     */
+    getSettings() {
+        return { ...this.settings };
     }
 }
 

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segmentit 改进版词性分析测试</title>
+    <!-- 引入 segmentit 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/segmentit@2.0.3/dist/umd/segmentit.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .token {
+            display: inline-block;
+            margin: 5px;
+            padding: 5px 10px;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+        }
+        .token-pos {
+            font-size: 12px;
+            color: #666;
+            margin-left: 5px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        h3 {
+            margin-top: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .pos-mapping {
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .pos-mapping table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .pos-mapping th, .pos-mapping td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .pos-mapping th {
+            background-color: #f2f2f2;
+        }
+        .debug-info {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px dashed #ddd;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Segmentit 改进版词性分析测试</h1>
+    
+    <div class="input-group">
+        <label for="inputText">输入中文文本：</label>
+        <textarea id="inputText" placeholder="请输入要分析的中文文本...">工信处女干事每月经过下属科室都要亲口交代24口交换机等技术性器件的安装工作。</textarea>
+    </div>
+    
+    <button id="analyzeBtn">分析文本</button>
+    
+    <h3>分词结果</h3>
+    <div id="tokenizeResult" class="result-container"></div>
+    
+    <h3>词性标注结果</h3>
+    <div id="tagResult" class="result-container"></div>
+    
+    <h3>按词性分组结果</h3>
+    <div id="groupByPosResult" class="result-container"></div>
+    
+    <div class="pos-mapping">
+        <h3>词性标记说明</h3>
+        <table>
+            <tr>
+                <th>标记</th>
+                <th>含义</th>
+            </tr>
+            <tr><td>n</td><td>名词</td></tr>
+            <tr><td>nr</td><td>人名</td></tr>
+            <tr><td>ns</td><td>地名</td></tr>
+            <tr><td>nt</td><td>机构团体</td></tr>
+            <tr><td>nz</td><td>其他专名</td></tr>
+            <tr><td>v</td><td>动词</td></tr>
+            <tr><td>vd</td><td>动副词</td></tr>
+            <tr><td>vn</td><td>名动词</td></tr>
+            <tr><td>a</td><td>形容词</td></tr>
+            <tr><td>ad</td><td>副形词</td></tr>
+            <tr><td>an</td><td>名形词</td></tr>
+            <tr><td>d</td><td>副词</td></tr>
+            <tr><td>m</td><td>数词</td></tr>
+            <tr><td>q</td><td>量词</td></tr>
+            <tr><td>r</td><td>代词</td></tr>
+            <tr><td>p</td><td>介词</td></tr>
+            <tr><td>c</td><td>连词</td></tr>
+            <tr><td>u</td><td>助词</td></tr>
+            <tr><td>e</td><td>叹词</td></tr>
+            <tr><td>o</td><td>拟声词</td></tr>
+            <tr><td>i</td><td>成语</td></tr>
+            <tr><td>j</td><td>简称略语</td></tr>
+            <tr><td>l</td><td>习用语</td></tr>
+            <tr><td>wp</td><td>标点符号</td></tr>
+            <tr><td>ws</td><td>字符串</td></tr>
+            <tr><td>x</td><td>其他</td></tr>
+        </table>
+    </div>
+    
+    <div id="debugInfo" class="debug-info"></div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化 segmentit
+            let segmentit = null;
+            try {
+                segmentit = Segmentit.useDefault(new Segmentit.Segment());
+                console.log('Segmentit 初始化成功');
+            } catch (error) {
+                console.error('Segmentit 初始化失败:', error);
+                alert('Segmentit 初始化失败，请检查控制台错误信息');
+                return;
+            }
+            
+            // 词性编码映射表
+            const POS_MAP = {
+                // 名词
+                1048576: 'n',      // 名词
+                8: 'nr',           // 人名
+                16: 'nz',          // 其他专名
+                4: 'ns',           // 地名
+                2: 'nt',           // 机构团体
+                
+                // 动词
+                4096: 'v',         // 动词
+                
+                // 形容词
+                1073741824: 'a',   // 形容词
+                
+                // 数词和量词
+                2097152: 'm',      // 数词
+                4194304: 'q',      // 量词
+                
+                // 代词
+                8388608: 'r',      // 代词
+                
+                // 副词
+                134217728: 'd',    // 副词
+                
+                // 介词
+                262144: 'p',       // 介词
+                
+                // 连词
+                268435456: 'c',    // 连词
+                
+                // 助词
+                8192: 'u',         // 助词
+                
+                // 标点符号
+                2048: 'wp',        // 标点符号
+                
+                // 其他
+                131072: 'x'        // 其他
+            };
+            
+            // 获取词性名称
+            function getPosName(posCode) {
+                return POS_MAP[posCode] || `未知(${posCode})`;
+            }
+            
+            // 分析按钮点击事件
+            document.getElementById('analyzeBtn').addEventListener('click', function() {
+                const text = document.getElementById('inputText').value.trim();
+                if (!text) {
+                    alert('请输入要分析的文本');
+                    return;
+                }
+                
+                try {
+                    // 分词（简单模式）
+                    const simpleResult = segmentit.doSegment(text, {
+                        simple: true
+                    });
+                    displayTokens(simpleResult);
+                    
+                    // 词性标注（完整模式）
+                    const fullResult = segmentit.doSegment(text, {
+                        simple: false
+                    });
+                    
+                    // 显示调试信息
+                    displayDebugInfo(fullResult);
+                    
+                    // 处理词性标注
+                    const taggedResult = fullResult.map(item => {
+                        return {
+                            w: item.w,
+                            p: getPosName(item.p),
+                            rawP: item.p
+                        };
+                    });
+                    
+                    displayTagResult(taggedResult);
+                    
+                    // 按词性分组
+                    displayGroupByPos(taggedResult);
+                } catch (error) {
+                    console.error('分析文本时发生错误:', error);
+                    alert('分析文本时发生错误，请检查控制台错误信息');
+                }
+            });
+            
+            // 显示分词结果
+            function displayTokens(tokens) {
+                const container = document.getElementById('tokenizeResult');
+                container.innerHTML = '';
+                
+                if (!tokens || tokens.length === 0) {
+                    container.textContent = '无分词结果';
+                    return;
+                }
+                
+                tokens.forEach(token => {
+                    const span = document.createElement('span');
+                    span.className = 'token';
+                    span.textContent = token;
+                    container.appendChild(span);
+                });
+            }
+            
+            // 显示词性标注结果
+            function displayTagResult(tagResult) {
+                const container = document.getElementById('tagResult');
+                container.innerHTML = '';
+                
+                if (!tagResult || tagResult.length === 0) {
+                    container.textContent = '无词性标注结果';
+                    return;
+                }
+                
+                tagResult.forEach(item => {
+                    const span = document.createElement('span');
+                    span.className = 'token';
+                    span.textContent = item.w;
+                    
+                    const posSpan = document.createElement('span');
+                    posSpan.className = 'token-pos';
+                    posSpan.textContent = `[${item.p}]`;
+                    span.appendChild(posSpan);
+                    
+                    container.appendChild(span);
+                });
+            }
+            
+            // 按词性分组显示
+            function displayGroupByPos(tagResult) {
+                const container = document.getElementById('groupByPosResult');
+                container.innerHTML = '';
+                
+                if (!tagResult || tagResult.length === 0) {
+                    container.textContent = '无词性分组结果';
+                    return;
+                }
+                
+                // 按词性分组
+                const posGroups = {};
+                
+                tagResult.forEach(item => {
+                    const pos = item.p;
+                    if (!posGroups[pos]) {
+                        posGroups[pos] = [];
+                    }
+                    posGroups[pos].push(item.w);
+                });
+                
+                // 显示分组结果
+                for (const pos in posGroups) {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.style.marginBottom = '10px';
+                    
+                    const posLabel = document.createElement('strong');
+                    posLabel.textContent = `${pos}: `;
+                    groupDiv.appendChild(posLabel);
+                    
+                    posGroups[pos].forEach(word => {
+                        const wordSpan = document.createElement('span');
+                        wordSpan.className = 'token';
+                        wordSpan.textContent = word;
+                        groupDiv.appendChild(wordSpan);
+                    });
+                    
+                    container.appendChild(groupDiv);
+                }
+            }
+            
+            // 显示调试信息
+            function displayDebugInfo(fullResult) {
+                const debugContainer = document.getElementById('debugInfo');
+                debugContainer.innerHTML = '<h4>原始词性编码信息（用于调试）</h4>';
+                
+                const table = document.createElement('table');
+                table.style.width = '100%';
+                table.style.borderCollapse = 'collapse';
+                
+                // 表头
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                ['词语', '词性编码', '映射词性'].forEach(header => {
+                    const th = document.createElement('th');
+                    th.textContent = header;
+                    th.style.border = '1px solid #ddd';
+                    th.style.padding = '8px';
+                    th.style.textAlign = 'left';
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                
+                // 表体
+                const tbody = document.createElement('tbody');
+                fullResult.forEach(item => {
+                    const row = document.createElement('tr');
+                    
+                    // 词语
+                    const wordCell = document.createElement('td');
+                    wordCell.textContent = item.w;
+                    wordCell.style.border = '1px solid #ddd';
+                    wordCell.style.padding = '8px';
+                    row.appendChild(wordCell);
+                    
+                    // 词性编码
+                    const codeCell = document.createElement('td');
+                    codeCell.textContent = item.p;
+                    codeCell.style.border = '1px solid #ddd';
+                    codeCell.style.padding = '8px';
+                    row.appendChild(codeCell);
+                    
+                    // 映射词性
+                    const posCell = document.createElement('td');
+                    posCell.textContent = getPosName(item.p);
+                    posCell.style.border = '1px solid #ddd';
+                    posCell.style.padding = '8px';
+                    row.appendChild(posCell);
+                    
+                    tbody.appendChild(row);
+                });
+                table.appendChild(tbody);
+                
+                debugContainer.appendChild(table);
+            }
+            
+            // 初始加载时自动分析示例文本
+            document.getElementById('analyzeBtn').click();
+        });
+    </script>
+</body>
+</html>

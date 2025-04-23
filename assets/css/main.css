@@ -499,6 +499,27 @@ body {
     color: var(--info-color);
 }
 
+/* 替代匹配下拉菜单样式 */
+.alt-match-select {
+    width: 100%;
+    padding: 0.3rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-size: 0.85rem;
+}
+
+.alt-match-select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: var(--light-color);
+}
+
+.alt-match-select option {
+    padding: 0.3rem;
+}
+
 .status-success {
     color: var(--success-color);
 }
@@ -519,19 +540,28 @@ body {
     bottom: 20px;
     right: 20px;
     padding: 0.75rem 1.5rem;
-    background-color: var(--dark-color);
+    background-color: var(--primary-color);
     color: white;
     border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
     z-index: 1000;
     opacity: 0;
     transform: translateY(20px);
     transition: opacity 0.3s, transform 0.3s;
+    font-weight: bold;
+    font-size: 1rem;
+    min-width: 200px;
+    text-align: center;
 }
 
 .status-message.show {
     opacity: 1;
     transform: translateY(0);
+}
+
+/* 进度消息特殊样式 */
+.status-message.progress {
+    background-color: var(--info-color);
 }
 
 /* 模态对话框 */

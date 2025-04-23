@@ -258,8 +258,50 @@ class NamingRules {
 
         if (elements.fxName) {
             // 使用标准化的英文描述（如果有），否则使用不带序号的文件名
-            const fxName = file.standardizedName || file.nameWithoutNumber || file.name;
-            parts.push(fxName.replace(/\s+/g, ' ').trim());
+            let fxName = file.standardizedName || file.nameWithoutNumber || file.name;
+
+            // 根据命名风格格式化FXName
+            if (this.settings.namingStyle && this.settings.namingStyle !== 'none') {
+                // 先清理文本，确保正确分割单词
+                fxName = fxName.replace(/\s+/g, ' ').trim();
+
+                // 分割单词
+                const words = fxName.split(/\s+/);
+
+                switch (this.settings.namingStyle) {
+                    case 'camelCase':
+                        fxName = words.map((word, index) => {
+                            if (index === 0) {
+                                return word.toLowerCase();
+                            }
+                            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                        }).join('');
+                        break;
+
+                    case 'PascalCase':
+                        fxName = words.map(word => {
+                            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                        }).join('');
+                        break;
+
+                    case 'snake_case':
+                        fxName = words.map(word => word.toLowerCase()).join('_');
+                        break;
+
+                    case 'kebab-case':
+                        fxName = words.map(word => word.toLowerCase()).join('-');
+                        break;
+
+                    case 'custom':
+                        fxName = words.join(this.settings.customSeparator || '_');
+                        break;
+                }
+            } else {
+                // 如果没有命名风格，只清理空格
+                fxName = fxName.replace(/\s+/g, ' ').trim();
+            }
+
+            parts.push(fxName);
         }
 
         if (elements.fxName_zh && file.translatedName) {

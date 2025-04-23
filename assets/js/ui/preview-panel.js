@@ -98,6 +98,9 @@ class PreviewPanel {
                 <td><input type="checkbox" class="file-select-checkbox" ${file.selected ? 'checked' : ''}></td>
                 <td title="${file.originalName}">${file.originalName}</td>
                 <td class="cat-id">${file.catID || '等待分类...'}</td>
+                <td class="alt-match">
+                    ${this._createAlternateMatchDropdown(file)}
+                </td>
                 <td class="fx-name">${file.standardizedName || file.nameWithoutNumber || '等待翻译...'}</td>
                 <td class="translation-result">${file.translatedName || '等待翻译...'}</td>
                 <td class="final-name">${file.formattedName || '等待生成...'}</td>
@@ -133,6 +136,40 @@ class PreviewPanel {
     }
 
     /**
+     * 创建替代匹配下拉菜单
+     * @param {Object} file - 文件对象
+     * @returns {string} 下拉菜单HTML
+     * @private
+     */
+    _createAlternateMatchDropdown(file) {
+        // 如果文件还没有匹配结果或者正在处理中，显示等待消息
+        if (!file.matchResults || file.matchResults.length === 0 || file.status === 'processing' || file.status === 'pending') {
+            return '等待匹配...';
+        }
+
+        // 创建下拉菜单
+        let html = `<select class="alt-match-select" data-file-id="${file.id}" ${file.status !== 'success' ? 'disabled' : ''}`;
+
+        // 添加变更事件
+        html += ` onchange="window.PreviewPanel.handleAlternateMatchChange(this, '${file.id}')">`;
+
+        // 添加选项
+        for (let i = 0; i < file.matchResults.length; i++) {
+            const match = file.matchResults[i];
+            const selected = i === file.currentMatchRank ? 'selected' : '';
+            html += `<option value="${i}" ${selected}>匹配 ${i+1}: ${match.term.catID}</option>`;
+        }
+
+        // 如果没有匹配结果，添加一个禁用的选项
+        if (file.matchResults.length === 0) {
+            html += `<option value="-1" disabled>无匹配结果</option>`;
+        }
+
+        html += '</select>';
+        return html;
+    }
+
+    /**
      * 更新行数据
      * @param {number} index - 行索引
      * @param {Object} file - 文件对象
@@ -151,6 +188,12 @@ class PreviewPanel {
         const catIdCell = row.querySelector('.cat-id');
         if (catIdCell) {
             catIdCell.textContent = file.catID || '等待分类...';
+        }
+
+        // 更新替代匹配下拉菜单
+        const altMatchCell = row.querySelector('.alt-match');
+        if (altMatchCell) {
+            altMatchCell.innerHTML = this._createAlternateMatchDropdown(file);
         }
 
         // 更新英文描述(FXName)
@@ -218,7 +261,7 @@ class PreviewPanel {
 
         try {
             // 执行翻译，并传入回调函数实现实时更新
-            const translatedFiles = await this.fileProcessor.processTranslation(selectedFiles, (files, index) => {
+            await this.fileProcessor.processTranslation(selectedFiles, (files, index) => {
                 // 在每个文件处理完成后更新数据
                 const processedFile = files[index];
 
@@ -418,6 +461,106 @@ class PreviewPanel {
         }
     }
 }
+
+/**
+ * 处理替代匹配变更的静态方法
+ * @param {HTMLElement} selectElement - 选择元素
+ * @param {string} fileId - 文件ID
+ */
+PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
+    try {
+        console.log('开始处理替代匹配变更', { selectElement, fileId });
+
+        // 获取当前页面上的PreviewPanel实例
+        const previewPanels = Object.values(window).filter(obj => obj instanceof PreviewPanel);
+        if (previewPanels.length === 0) {
+            console.error('找不到PreviewPanel实例');
+            alert('内部错误：找不到PreviewPanel实例');
+            return;
+        }
+
+        const previewPanel = previewPanels[0];
+        const newRank = parseInt(selectElement.value, 10);
+        console.log('新选择的排名：', newRank);
+
+        // 找到对应的文件
+        const file = previewPanel.files.find(f => f.id === fileId);
+        if (!file) {
+            console.error(`找不到ID为 ${fileId} 的文件`);
+            alert(`内部错误：找不到ID为 ${fileId} 的文件`);
+            return;
+        }
+
+        console.log('找到文件：', file);
+
+        // 检查文件是否有匹配结果
+        if (!file.matchResults || !Array.isArray(file.matchResults)) {
+            console.error('文件没有匹配结果数组');
+            alert('内部错误：文件没有匹配结果数组');
+            return;
+        }
+
+        // 更新文件的当前匹配排名
+        file.currentMatchRank = newRank;
+
+        // 获取新的匹配结果
+        const newMatch = file.matchResults[newRank];
+        console.log('新的匹配结果：', newMatch);
+
+        if (!newMatch) {
+            console.error(`找不到排名为 ${newRank} 的匹配结果`);
+            alert(`内部错误：找不到排名为 ${newRank} 的匹配结果`);
+            return;
+        }
+
+        // 检查匹配结果是否有term属性
+        if (!newMatch.term) {
+            console.error('匹配结果没有term属性', newMatch);
+            alert('内部错误：匹配结果格式不正确');
+            return;
+        }
+
+        // 更新文件的分类信息
+        file.category = newMatch.term.catShort || '';
+        file.categoryName = newMatch.term.category || '';
+        file.categoryNameZh = newMatch.term.categoryNameZh || '';
+        file.subCategory = newMatch.term.source || '';
+        file.subCategoryTranslated = newMatch.term.target || '';
+        file.catID = newMatch.term.catID || '';
+
+        console.log('更新后的文件分类信息：', {
+            category: file.category,
+            categoryName: file.categoryName,
+            catID: file.catID
+        });
+
+        // 重新生成最终文件名
+        if (window.pluginState && window.pluginState.fileProcessor) {
+            console.log('开始重新生成最终文件名');
+            const newFileName = window.pluginState.fileProcessor.formatFileName(file);
+            console.log('新生成的文件名：', newFileName);
+        } else {
+            console.error('找不到fileProcessor实例');
+        }
+
+        // 找到文件在数组中的索引
+        const fileIndex = previewPanel.files.findIndex(f => f.id === fileId);
+        if (fileIndex !== -1) {
+            // 更新表格中当前文件的行
+            console.log('开始更新表格行，索引：', fileIndex);
+            previewPanel._updateRowData(fileIndex, file);
+        } else {
+            console.error('找不到文件在数组中的索引');
+        }
+
+        // 显示状态消息
+        previewPanel._showStatusMessage(`已应用第 ${newRank+1} 佳匹配结果：${newMatch.term.catID}`);
+        console.log('处理替代匹配变更完成');
+    } catch (error) {
+        console.error('处理替代匹配变更时发生错误：', error);
+        alert(`处理替代匹配变更时发生错误：${error.message}`);
+    }
+};
 
 // 导出PreviewPanel
 window.PreviewPanel = PreviewPanel;

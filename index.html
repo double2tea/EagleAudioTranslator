@@ -6,6 +6,12 @@
     <title>音效文件名翻译重命名 | Eagle插件</title>
     <link rel="stylesheet" href="./assets/css/main.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+    <!-- NLP库 (本地文件) -->
+    <script src="./assets/js/libs/compromise.js"></script>
+    <!-- 中文分词和词性分析库 -->
+    <script src="https://cdn.jsdelivr.net/npm/segmentit@2.0.3/dist/umd/segmentit.min.js"></script>
+    <script src="./assets/js/libs/segmentit-direct.js"></script>
 </head>
 <body>
     <!-- 插件加载状态提示 -->
@@ -168,6 +174,24 @@
                                         <small>使用AI接口获取音效分类信息，提高匹配准确性（需要额外API请求）</small>
                                     </div>
                                 </div>
+
+                                <div class="setting-item">
+                                    <label for="matchStrategy"><i class="fas fa-sitemap"></i> 匹配策略：</label>
+                                    <select id="matchStrategy">
+                                        <option value="auto">自动（按优先级）</option>
+                                        <option value="ai">AI辅助分类（如果启用）</option>
+                                        <option value="bilingual">双语匹配（中英文结合）</option>
+                                        <option value="pos">基于分词系统的匹配</option>
+                                        <option value="translated">翻译文本直接匹配</option>
+                                        <option value="multiWord">多词匹配</option>
+                                        <option value="keyword">关键词匹配</option>
+                                    </select>
+                                    <div class="setting-description">
+                                        <small>选择匹配策略会影响分类结果的准确性，自动模式会按优先级尝试所有策略</small>
+                                    </div>
+                                </div>
+
+
                             </div>
                         </div>
 
@@ -463,11 +487,12 @@
                         <thead>
                             <tr>
                                 <th width="5%"><input type="checkbox" id="selectAllFiles" checked></th>
-                                <th width="15%">原文件名</th>
-                                <th width="10%">CatID</th>
-                                <th width="15%">英文描述(FXName)</th>
-                                <th width="15%">中文描述(FXName_zh)</th>
-                                <th width="30%">最终文件名</th>
+                                <th width="13%">原文件名</th>
+                                <th width="8%">CatID</th>
+                                <th width="8%">替代匹配</th>
+                                <th width="14%">英文描述(FXName)</th>
+                                <th width="14%">中文描述(FXName_zh)</th>
+                                <th width="28%">最终文件名</th>
                                 <th width="10%">状态</th>
                             </tr>
                         </thead>
@@ -578,6 +603,7 @@
     <script src="./assets/js/core/translation/translation-service.js"></script>
     <script src="./assets/js/core/ai-classifier.js"></script>
     <script src="./assets/js/core/csv-matcher.js"></script>
+    <script src="./assets/js/core/smart-classifier.js"></script>
     <script src="./assets/js/core/file-processor.js"></script>
     <script src="./assets/js/core/naming-rules.js"></script>
 
