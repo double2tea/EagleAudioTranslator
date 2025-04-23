@@ -5,9 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>音效文件名翻译重命名 | Eagle插件</title>
 
-    <!-- Tailwind CSS 和 DaisyUI -->
+    <!-- Tailwind CSS -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.5/dist/full.css" rel="stylesheet">
 
     <!-- 自定义样式 -->
     <link rel="stylesheet" href="./assets/css/main.css">
@@ -23,88 +22,126 @@
 </head>
 <body>
     <!-- 插件加载状态提示 -->
-    <div id="loadingIndicator" class="fixed inset-0 bg-white bg-opacity-90 flex flex-col justify-center items-center z-50">
-        <div class="loading loading-spinner loading-lg text-primary"></div>
-        <p class="mt-4 text-lg font-medium">正在加载插件...</p>
-        <p id="loadingStatus" class="mt-2 text-sm text-gray-600"></p>
-        <div id="loadingError" class="hidden mt-6 p-4 bg-error bg-opacity-20 text-error rounded-lg max-w-md text-center">
-            <p class="font-bold mb-2">插件加载失败</p>
-            <p id="errorMessage" class="mb-3">请刷新页面或重启 Eagle 后重试。</p>
-            <button onclick="location.reload()" class="btn btn-error btn-sm">刷新页面</button>
+    <div id="loadingIndicator" style="position: fixed; inset: 0; background-color: rgba(255, 255, 255, 0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;">
+        <div style="width: 48px; height: 48px; border: 4px solid #6200ee; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 1rem; font-size: 1.125rem; font-weight: 500;">正在加载插件...</p>
+        <p id="loadingStatus" style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"></p>
+        <div id="loadingError" style="display: none; margin-top: 1.5rem; padding: 1rem; background-color: rgba(220, 38, 38, 0.1); color: #dc2626; border-radius: 0.5rem; max-width: 24rem; text-align: center;">
+            <p style="font-weight: 700; margin-bottom: 0.5rem;">插件加载失败</p>
+            <p id="errorMessage" style="margin-bottom: 0.75rem;">请刷新页面或重启 Eagle 后重试。</p>
+            <button onclick="location.reload()" style="padding: 0.375rem 0.75rem; background-color: #dc2626; color: white; border: none; border-radius: 0.25rem; font-size: 0.875rem; cursor: pointer;">刷新页面</button>
         </div>
     </div>
 
-    <div id="app" style="display:none;" class="min-h-screen bg-base-100">
-        <header class="bg-primary text-primary-content shadow-lg">
-            <div class="container mx-auto py-4 px-4 relative">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h1 class="text-2xl font-bold flex items-center gap-2">
-                            <i class="fas fa-language"></i> 音效文件名翻译重命名
-                        </h1>
-                        <p class="text-sm opacity-90 mt-1">智能翻译并格式化音效文件名称</p>
-                    </div>
-                    <div class="flex items-center gap-4">
-                        <div id="plugin-info" class="flex flex-wrap gap-2"></div>
-                        <button id="themeToggle" class="btn btn-circle btn-ghost">
-                            <i class="fas fa-moon text-xl"></i>
-                        </button>
-                    </div>
+    <style>
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+
+    <div id="app" style="display:none;" class="app-container">
+        <!-- 左侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <i class="fas fa-music"></i>
+                <span>音效文件名<br>翻译重命名</span>
+            </div>
+
+            <div class="sidebar-info">
+                <div class="sidebar-info-item">
+                    <i class="fas fa-fingerprint"></i>
+                    <span>插件ID: 432c3930-499f-4013-ad33-7f880a5ed0dd</span>
+                </div>
+                <div class="sidebar-info-item">
+                    <i class="fas fa-code-branch"></i>
+                    <span>版本: 1.0.0</span>
                 </div>
             </div>
-        </header>
 
-        <main class="container mx-auto px-4 py-6">
-            <!-- 工作流程指引 -->
-            <div class="mb-8">
-                <ul class="steps steps-horizontal w-full">
-                    <li class="step step-primary">选择文件</li>
-                    <li class="step">设置翻译</li>
-                    <li class="step">命名规则</li>
-                    <li class="step">预览结果</li>
-                </ul>
+            <div style="margin-top: auto; text-align: center;">
+                <button id="themeToggle" style="background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer;">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 步骤指示器 -->
+            <div class="steps-container">
+                <div class="step active" data-step="1">
+                    <div class="step-number">1</div>
+                    <div class="step-label">选择文件</div>
+                </div>
+                <div class="step-divider"></div>
+                <div class="step" data-step="2">
+                    <div class="step-number">2</div>
+                    <div class="step-label">设置翻译</div>
+                </div>
+                <div class="step-divider"></div>
+                <div class="step" data-step="3">
+                    <div class="step-number">3</div>
+                    <div class="step-label">命名规则</div>
+                </div>
+                <div class="step-divider"></div>
+                <div class="step" data-step="4">
+                    <div class="step-number">4</div>
+                    <div class="step-label">预览结果</div>
+                </div>
             </div>
 
             <!-- 主要内容容器 -->
-            <div class="space-y-8">
+            <div class="space-y-6">
                 <!-- 文件选择区域 -->
-                <section id="fileSelector" class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h2 class="card-title text-xl mb-4">
-                            <i class="fas fa-file-audio text-primary"></i> 选择音效文件
+                <section id="fileSelector" class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-file-audio"></i> 选择音效文件
                         </h2>
-
-                        <div class="flex flex-wrap gap-3 mb-6">
+                    </div>
+                    <div class="card-body">
+                        <div class="flex flex-wrap gap-4 mb-6">
                             <button id="selectFromCurrent" class="btn btn-primary">
-                                <i class="fas fa-mouse-pointer mr-2"></i> 当前选中
+                                <i class="fas fa-mouse-pointer"></i> 当前选中
                             </button>
                             <button id="selectFromFolder" class="btn btn-primary">
-                                <i class="fas fa-folder-open mr-2"></i> 从文件夹
+                                <i class="fas fa-folder-open"></i> 从文件夹
                             </button>
                             <button id="selectFromTag" class="btn btn-primary">
-                                <i class="fas fa-tags mr-2"></i> 从标签
+                                <i class="fas fa-tags"></i> 从标签
                             </button>
                         </div>
 
-                        <div class="alert alert-info mb-4">
-                            已选择 <span id="selectedCount" class="font-bold">0</span> 个文件
+                        <div style="background-color: #e3f2fd; color: #0d47a1; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            已选择 <span id="selectedCount" style="font-weight: bold;">0</span> 个文件
                         </div>
 
-                        <div id="selectedFilesList" class="max-h-60 overflow-y-auto border border-base-300 rounded-lg p-2"></div>
+                        <div id="selectedFilesList" style="max-height: 15rem; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;"></div>
                     </div>
                 </section>
 
                 <!-- 翻译设置区域 -->
-                <section id="translationSettings" class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h2 class="card-title text-xl mb-4">
-                            <i class="fas fa-cog text-primary"></i> 翻译设置
+                <section id="translationSettings" class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-cog"></i> 翻译设置
                         </h2>
-
-                        <div class="tabs tabs-boxed mb-6">
-                            <a class="tab tab-active" data-tab="translationTab">翻译设置</a>
-                            <a class="tab" data-tab="aiTab">AI模型设置</a>
+                    </div>
+                    <div class="card-body">
+                        <div style="display: flex; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                            <a class="tab-btn active" data-tab="translationTab" style="padding: 0.75rem 1.5rem; cursor: pointer; position: relative; font-weight: 500;">翻译设置</a>
+                            <a class="tab-btn" data-tab="aiTab" style="padding: 0.75rem 1.5rem; cursor: pointer; position: relative; font-weight: 500;">AI模型设置</a>
                         </div>
+
+                        <style>
+                            .tab-btn.active {
+                                color: var(--primary-color);
+                                border-bottom: 2px solid var(--primary-color);
+                            }
+                            .tab-btn {
+                                color: var(--text-secondary);
+                            }
+                        </style>
 
                         <div class="tab-content">
                         <div id="translationTab" class="tab-pane active">
@@ -141,12 +178,15 @@
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div class="form-control">
-                                    <label class="cursor-pointer label justify-start gap-4">
-                                        <input type="checkbox" id="standardizeEnglish" class="toggle toggle-primary">
-                                        <span class="label-text flex items-center gap-2">
+                                    <div class="toggle-container">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="standardizeEnglish">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                        <span class="toggle-label">
                                             <i class="fas fa-robot"></i> 对英文进行标准化处理
                                         </span>
-                                    </label>
+                                    </div>
                                 </div>
 
                                 <div id="namingStyleContainer" class="form-control" style="display:none;">
@@ -180,31 +220,40 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <div class="form-control mb-4">
-                                        <label class="cursor-pointer label justify-start gap-4">
-                                            <input type="checkbox" id="useCache" checked class="toggle toggle-primary">
-                                            <span class="label-text flex items-center gap-2">
+                                        <div class="toggle-container">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="useCache" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                            <span class="toggle-label">
                                                 <i class="fas fa-database"></i> 启用翻译缓存
                                             </span>
-                                        </label>
+                                        </div>
                                     </div>
 
                                     <div class="form-control mb-4">
-                                        <label class="cursor-pointer label justify-start gap-4">
-                                            <input type="checkbox" id="useCSV" checked class="toggle toggle-primary">
-                                            <span class="label-text flex items-center gap-2">
+                                        <div class="toggle-container">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="useCSV" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                            <span class="toggle-label">
                                                 <i class="fas fa-table"></i> 使用CSV术语库
                                             </span>
-                                        </label>
+                                        </div>
                                     </div>
 
                                     <div class="form-control">
-                                        <label class="cursor-pointer label justify-start gap-4">
-                                            <input type="checkbox" id="useAIClassification" class="toggle toggle-primary">
-                                            <span class="label-text flex items-center gap-2">
+                                        <div class="toggle-container">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="useAIClassification">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                            <span class="toggle-label">
                                                 <i class="fas fa-robot"></i> 使用AI辅助分类匹配
                                             </span>
-                                        </label>
-                                        <div class="text-xs text-gray-500 ml-12">
+                                        </div>
+                                        <div style="margin-left: 3.5rem; font-size: 0.75rem; color: var(--text-secondary);">
                                             使用AI接口获取音效分类信息，提高匹配准确性（需要额外API请求）
                                         </div>
                                     </div>
@@ -467,100 +516,114 @@
                 </section>
 
                 <!-- 命名规则设置 -->
-                <section id="namingRules" class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h2 class="card-title text-xl mb-4">
-                            <i class="fas fa-font text-primary"></i> 命名规则设置
+                <section id="namingRules" class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-font"></i> 命名规则设置
                         </h2>
-
+                    </div>
+                    <div class="card-body">
                         <div class="form-control mb-6">
-                            <label class="cursor-pointer label justify-start gap-4">
-                                <input type="checkbox" id="useUCSNaming" checked class="toggle toggle-primary">
-                                <span class="label-text flex items-center gap-2">
+                            <div class="toggle-container">
+                                <label class="toggle">
+                                    <input type="checkbox" id="useUCSNaming" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">
                                     <i class="fas fa-sitemap"></i> 使用UCS回路式命名规则
                                 </span>
-                            </label>
+                            </div>
                         </div>
 
                     <!-- UCS命名规则设置 -->
-                    <div id="ucsNamingOptions" class="bg-base-200 p-4 rounded-lg">
-                        <h3 class="text-lg font-medium mb-2">命名元素选择</h3>
-                        <p class="text-sm text-gray-500 mb-4">选择要包含的命名元素和排列顺序</p>
+                    <div id="ucsNamingOptions" style="background-color: #f5f7fa; padding: 1.5rem; border-radius: 0.5rem; border: 1px solid #e0e6ed;">
+                        <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">命名元素选择</h3>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">选择要包含的命名元素和排列顺序</p>
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div class="card bg-base-100 shadow-sm">
-                                <div class="card-body p-4">
-                                    <h4 class="card-title text-base mb-2">分类信息</h4>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="catID" checked class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">分类ID (CatID)</span>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                            <div style="background-color: white; border-radius: 0.5rem; box-shadow: var(--custom-shadow); overflow: hidden;">
+                                <div style="padding: 1rem;">
+                                    <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--primary-color);">分类信息</h4>
+
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="catID" checked style="margin-right: 0.5rem;">
+                                            <span>分类ID (CatID)</span>
                                         </label>
                                     </div>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="category" class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">分类名称 (Category)</span>
+
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="category" style="margin-right: 0.5rem;">
+                                            <span>分类名称 (Category)</span>
                                         </label>
                                     </div>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="category_zh" checked class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">分类中文名 (Category_zh)</span>
+
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="category_zh" checked style="margin-right: 0.5rem;">
+                                            <span>分类中文名 (Category_zh)</span>
                                         </label>
                                     </div>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="subCategory" class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">子分类 (SubCategory)</span>
+
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="subCategory" style="margin-right: 0.5rem;">
+                                            <span>子分类 (SubCategory)</span>
                                         </label>
                                     </div>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="subCategory_zh" class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">子分类中文名 (SubCategory_zh)</span>
+
+                                    <div>
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="subCategory_zh" style="margin-right: 0.5rem;">
+                                            <span>子分类中文名 (SubCategory_zh)</span>
                                         </label>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="card bg-base-100 shadow-sm">
-                                <div class="card-body p-4">
-                                    <h4 class="card-title text-base mb-2">描述信息</h4>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="fxName" checked class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">英文描述 (FXName)</span>
+                            <div style="background-color: white; border-radius: 0.5rem; box-shadow: var(--custom-shadow); overflow: hidden;">
+                                <div style="padding: 1rem;">
+                                    <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--primary-color);">描述信息</h4>
+
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="fxName" checked style="margin-right: 0.5rem;">
+                                            <span>英文描述 (FXName)</span>
                                         </label>
                                     </div>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="fxName_zh" checked class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">中文描述 (FXName_zh)</span>
+
+                                    <div>
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="fxName_zh" checked style="margin-right: 0.5rem;">
+                                            <span>中文描述 (FXName_zh)</span>
                                         </label>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="card bg-base-100 shadow-sm">
-                                <div class="card-body p-4">
-                                    <h4 class="card-title text-base mb-2">元数据</h4>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="creatorID" class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">制作者ID (CreatorID)</span>
+                            <div style="background-color: white; border-radius: 0.5rem; box-shadow: var(--custom-shadow); overflow: hidden;">
+                                <div style="padding: 1rem;">
+                                    <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--primary-color);">元数据</h4>
+
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="creatorID" style="margin-right: 0.5rem;">
+                                            <span>制作者ID (CreatorID)</span>
                                         </label>
                                     </div>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="sourceID" class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">项目ID (SourceID)</span>
+
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="sourceID" style="margin-right: 0.5rem;">
+                                            <span>项目ID (SourceID)</span>
                                         </label>
                                     </div>
-                                    <div class="form-control">
-                                        <label class="cursor-pointer label py-1">
-                                            <input type="checkbox" id="serialNumber" class="checkbox checkbox-sm checkbox-primary">
-                                            <span class="label-text ml-2">三位数序号 (000)</span>
+
+                                    <div>
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input type="checkbox" id="serialNumber" style="margin-right: 0.5rem;">
+                                            <span>三位数序号 (000)</span>
                                         </label>
                                     </div>
                                 </div>
@@ -656,14 +719,16 @@
                 </section>
 
                 <!-- 翻译预览区域 -->
-                <section id="previewPanel" class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h2 class="card-title text-xl mb-4">
-                            <i class="fas fa-eye text-primary"></i> 预览与处理
+                <section id="previewPanel" class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-eye"></i> 预览与处理
                         </h2>
+                    </div>
+                    <div class="card-body">
 
-                        <div id="previewPlaceholder" class="flex flex-col items-center justify-center py-12 text-gray-500">
-                            <i class="fas fa-file-audio text-5xl mb-4 opacity-50"></i>
+                        <div id="previewPlaceholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 0; color: var(--text-secondary);">
+                            <i class="fas fa-file-audio" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
                             <p class="text-lg">请先选择文件，然后点击"开始翻译"进行处理</p>
                         </div>
 
