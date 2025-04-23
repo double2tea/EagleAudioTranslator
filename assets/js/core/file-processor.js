@@ -524,6 +524,18 @@ class FileProcessor {
                                                 file.subCategory = term.source || '';
                                                 file.subCategoryTranslated = term.target || '';
                                                 file.catID = term.catID || '';
+
+                                                // 确保文件有匹配结果数组
+                                                if (!file.matchResults || !Array.isArray(file.matchResults)) {
+                                                    file.matchResults = [{
+                                                        term: term,
+                                                        score: 100,
+                                                        matchSource: 'firstPart',
+                                                        priority: 5
+                                                    }];
+                                                    file.availableMatchCount = 1;
+                                                    file.currentMatchRank = 0;
+                                                }
                                             }
                                         }
                                     }
@@ -738,6 +750,38 @@ class FileProcessor {
 
                     // 更新状态
                     file.status = 'success';
+
+                    // 确保文件有匹配结果数组，即使没有找到匹配
+                    if (!file.matchResults || !Array.isArray(file.matchResults) || file.matchResults.length === 0) {
+                        // 创建一个默认的匹配结果
+                        const defaultTerm = {
+                            catID: file.catID || 'UNKNOWN',
+                            catShort: file.category || 'UNK',
+                            category: file.categoryName || 'Unknown',
+                            categoryNameZh: file.categoryNameZh || '未知',
+                            source: file.subCategory || file.nameWithoutNumber || '',
+                            target: file.subCategoryTranslated || file.translatedName || ''
+                        };
+
+                        file.matchResults = [{
+                            term: defaultTerm,
+                            score: 100,
+                            matchSource: 'default',
+                            priority: 10
+                        }];
+                        file.availableMatchCount = 1;
+                        file.currentMatchRank = 0;
+
+                        // 如果没有设置catID，使用默认值
+                        if (!file.catID) {
+                            file.catID = defaultTerm.catID;
+                            file.category = defaultTerm.catShort;
+                            file.categoryName = defaultTerm.category;
+                            file.categoryNameZh = defaultTerm.categoryNameZh;
+                            file.subCategory = defaultTerm.source;
+                            file.subCategoryTranslated = defaultTerm.target;
+                        }
+                    }
 
                     Logger.debug(`文件 "${file.name}" 翻译完成: "${file.translatedName}"`);
                 } catch (error) {
