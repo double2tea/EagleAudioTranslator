@@ -23,15 +23,13 @@ class SmartClassifier {
                 other: 20        // 其他词性优先级最低
             },
             // 默认匹配策略
-            defaultMatchStrategy: 'auto', // 'auto', 'ai', 'bilingual', 'pos', 'translated', 'multiWord', 'keyword'
+            defaultMatchStrategy: 'auto', // 'auto', 'ai', 'bilingual', 'pos', 'translated'
             // 匹配策略优先级
             matchStrategyPriority: [
                 'ai',           // AI辅助分类（如果启用）
                 'bilingual',     // 双语匹配（中英文结合）
                 'pos',          // 基于分词系统的匹配
                 'translated',    // 翻译文本直接匹配
-                'multiWord',     // 多词匹配
-                'keyword'        // 关键词匹配
             ],
             // 是否启用词性分析
             usePosAnalysis: true,
