@@ -107,68 +107,6 @@ class SmartClassifier {
         }
     }
 
-    /**
-     * 初始化备用词性分析器
-     * @private
-     */
-    _initPosAnalyzer() {
-        // 简单的词性词典
-        this.posLexicon = {
-            // 常见名词
-            nouns: [
-                'keyboard', 'mouse', 'computer', 'cat', 'dog', 'bird', 'sheep', 'cow', 'animal',
-                'tape', 'cassette', 'paper', 'metal', 'steel', 'glitch', 'beep', 'bleep',
-                'click', 'pop', 'hiss', 'static', 'noise', 'sound', 'effect', 'tone',
-                'key', 'button', 'trackpad', 'touchpad', 'device', 'hardware',
-                '键盘', '鼠标', '电脑', '猫', '狗', '鸟', '羊', '牛', '动物',
-                '磁带', '纸', '金属', '钢', '故障', '哔', '噪音', '声音', '效果', '音调',
-                '按键', '触控板', '设备', '硬件'
-            ],
-            // 常见动词
-            verbs: [
-                'typing', 'clicking', 'pressing', 'tapping', 'hitting', 'recording',
-                'playing', 'scratching', 'rubbing', 'moving', 'scrolling',
-                '打字', '点击', '按压', '敲击', '击打', '录制', '播放', '刮擦', '摩擦', '移动', '滚动'
-            ],
-            // 常见形容词
-            adjectives: [
-                'digital', 'electronic', 'mechanical', 'synthetic', 'sci-fi', 'scifi', 'futuristic',
-                'rhythmic', 'glitchy', 'noisy', 'clean', 'clear', 'sharp', 'soft', 'loud',
-                '数字', '电子', '机械', '合成', '科幻', '未来', '节奏', '故障', '嘈杂', '清晰', '尖锐', '柔和', '响亮'
-            ],
-            // 常见副词
-            adverbs: [
-                'quickly', 'slowly', 'loudly', 'softly', 'repeatedly', 'continuously',
-                '快速', '缓慢', '大声', '轻柔', '重复', '连续'
-            ]
-        };
-
-        // 为了更快的查找，将词典转换为映射
-        this.posMap = {};
-
-        // 添加名词
-        this.posLexicon.nouns.forEach(word => {
-            this.posMap[word.toLowerCase()] = 'noun';
-        });
-
-        // 添加动词
-        this.posLexicon.verbs.forEach(word => {
-            this.posMap[word.toLowerCase()] = 'verb';
-        });
-
-        // 添加形容词
-        this.posLexicon.adjectives.forEach(word => {
-            this.posMap[word.toLowerCase()] = 'adjective';
-        });
-
-        // 添加副词
-        this.posLexicon.adverbs.forEach(word => {
-            this.posMap[word.toLowerCase()] = 'adverb';
-        });
-
-        console.log('词性分析器初始化完成，共加载词汇:',
-                    Object.keys(this.posMap).length);
-    }
 
     /**
      * 分析文本中的词性
@@ -430,223 +368,12 @@ class SmartClassifier {
         return false;
     }
 
-    /**
-     * 基于文件名中的关键词进行CSV匹配
-     * @param {string} filename - 文件名
-     * @returns {Object|null} 匹配结果
-     */
-    matchByKeywords(filename) {
-        if (!filename || !this.csvMatcher || !this.csvMatcher.loaded) {
-            return null;
-        }
+    // matchByKeywords方法已被移除，请使用csvMatcher.findMatch方法代替
 
-        // 分析词性
-        const posAnalysis = this.analyzePos(filename);
+    // multiWordMatch方法已被移除，请使用csvMatcher.findMatch方法代替
 
-        // 如果没有分析结果，返回null
-        if (posAnalysis.length === 0) {
-            return null;
-        }
-
-        // 收集所有可能的匹配结果
-        const matches = [];
-
-        // 按词性优先级尝试匹配
-        for (const wordInfo of posAnalysis) {
-            // 尝试使用当前词进行匹配
-            for (let i = 0; i < this.csvMatcher.terms.length; i++) {
-                const term = this.csvMatcher.terms[i];
-
-                // 检查术语源是否包含当前词
-                if (term.source.toLowerCase().includes(wordInfo.word)) {
-                    matches.push({
-                        term: term,
-                        score: wordInfo.weight * (term.source.length / filename.length),
-                        matchType: 'keyword_' + wordInfo.pos,
-                        word: wordInfo.word
-                    });
-                }
-
-                // 检查同义词是否包含当前词
-                if (term.synonyms && term.synonyms.toLowerCase().includes(wordInfo.word)) {
-                    matches.push({
-                        term: term,
-                        score: wordInfo.weight * 0.8 * (term.synonyms.length / filename.length),
-                        matchType: 'synonym_' + wordInfo.pos,
-                        word: wordInfo.word
-                    });
-                }
-            }
-        }
-
-        // 如果没有匹配结果，返回null
-        if (matches.length === 0) {
-            return null;
-        }
-
-        // 按分数排序，高分在前
-        matches.sort((a, b) => b.score - a.score);
-
-        // 返回最高分的匹配结果
-        return matches[0].term;
-    }
-
-    /**
-     * 多词匹配算法
-     * @param {string} filename - 文件名
-     * @returns {Object|null} 匹配结果
-     */
-    multiWordMatch(filename) {
-        if (!filename || !this.csvMatcher || !this.csvMatcher.loaded) {
-            return null;
-        }
-
-        // 分析词性
-        const posAnalysis = this.analyzePos(filename);
-
-        // 如果没有分析结果，返回null
-        if (posAnalysis.length === 0) {
-            return null;
-        }
-
-        // 收集所有可能的匹配结果
-        const matches = [];
-
-        // 尝试使用多个词进行匹配
-        // 首先，按词性权重排序，优先使用名词
-        const sortedWords = posAnalysis.slice().sort((a, b) => b.weight - a.weight);
-
-        // 从高权重词开始，尝试组合匹配
-        for (let i = 0; i < sortedWords.length; i++) {
-            const primaryWord = sortedWords[i];
-
-            // 单词匹配
-            const singleMatches = this._matchSingleWord(primaryWord.word);
-            if (singleMatches.length > 0) {
-                singleMatches.forEach(match => {
-                    matches.push({
-                        term: match.term,
-                        score: primaryWord.weight * match.score,
-                        matchType: 'single_' + primaryWord.pos,
-                        words: [primaryWord.word]
-                    });
-                });
-            }
-
-            // 尝试与其他词组合
-            for (let j = 0; j < sortedWords.length; j++) {
-                if (i === j) continue; // 跳过自身
-
-                const secondaryWord = sortedWords[j];
-
-                // 组合两个词进行匹配
-                const combinedMatches = this._matchWordCombination([primaryWord.word, secondaryWord.word]);
-                if (combinedMatches.length > 0) {
-                    combinedMatches.forEach(match => {
-                        matches.push({
-                            term: match.term,
-                            score: (primaryWord.weight + secondaryWord.weight * 0.5) * match.score,
-                            matchType: 'combined_' + primaryWord.pos + '_' + secondaryWord.pos,
-                            words: [primaryWord.word, secondaryWord.word]
-                        });
-                    });
-                }
-            }
-        }
-
-        // 如果没有匹配结果，返回null
-        if (matches.length === 0) {
-            return null;
-        }
-
-        // 按分数排序，高分在前
-        matches.sort((a, b) => b.score - a.score);
-
-        // 返回最高分的匹配结果
-        return matches[0].term;
-    }
-
-    /**
-     * 匹配单个词
-     * @param {string} word - 要匹配的词
-     * @returns {Array<Object>} 匹配结果
-     * @private
-     */
-    _matchSingleWord(word) {
-        const matches = [];
-
-        for (let i = 0; i < this.csvMatcher.terms.length; i++) {
-            const term = this.csvMatcher.terms[i];
-
-            // 精确匹配
-            if (term.source.toLowerCase() === word) {
-                matches.push({
-                    term: term,
-                    score: 1.0,
-                    matchType: 'exact'
-                });
-            }
-            // 包含匹配
-            else if (term.source.toLowerCase().includes(word)) {
-                matches.push({
-                    term: term,
-                    score: 0.8 * (word.length / term.source.length),
-                    matchType: 'contains'
-                });
-            }
-            // 同义词匹配
-            else if (term.synonyms && term.synonyms.toLowerCase().includes(word)) {
-                matches.push({
-                    term: term,
-                    score: 0.6,
-                    matchType: 'synonym'
-                });
-            }
-        }
-
-        return matches;
-    }
-
-    /**
-     * 匹配词组合
-     * @param {Array<string>} words - 要匹配的词数组
-     * @returns {Array<Object>} 匹配结果
-     * @private
-     */
-    _matchWordCombination(words) {
-        const matches = [];
-
-        for (let i = 0; i < this.csvMatcher.terms.length; i++) {
-            const term = this.csvMatcher.terms[i];
-            const termLower = term.source.toLowerCase();
-
-            // 计算匹配分数
-            let matchScore = 0;
-            let matchedWords = 0;
-
-            for (const word of words) {
-                if (termLower.includes(word)) {
-                    matchScore += word.length / termLower.length;
-                    matchedWords++;
-                }
-            }
-
-            // 如果至少匹配了一个词
-            if (matchedWords > 0) {
-                // 匹配的词越多，分数越高
-                const finalScore = matchScore * (matchedWords / words.length);
-
-                matches.push({
-                    term: term,
-                    score: finalScore,
-                    matchType: 'combination',
-                    matchedCount: matchedWords
-                });
-            }
-        }
-
-        return matches;
-    }
+    // 移除了_matchSingleWord和_matchWordCombination方法，因为它们已经被弃用
+    // 这些功能现在由csvMatcher中的_universalMatchingAlgorithm方法实现
 
     /**
      * 处理AI分类结果
@@ -677,32 +404,42 @@ class SmartClassifier {
         // 分析文件名的词性
         const posAnalysis = this.analyzePos(filename);
 
-        // 如果有词性分析结果，使用基于分词系统的匹配
-        if (posAnalysis && posAnalysis.length > 0 && this.csvMatcher) {
-            // 使用CSV匹配器的findMatch方法，传入词性分析结果
-            const matchResult = this.csvMatcher.findMatch(filename, posAnalysis);
+        // 使用identifyCategory方法进行匹配，这是最智能的匹配方式
+        try {
+            // 准备匹配选项
+            const matchOptions = {
+                usePosAnalysis: true
+            };
 
-            if (matchResult) {
-                console.log(`使用基于分词系统的匹配成功: ${filename} -> ${matchResult.catID}`);
+            // 使用CSV匹配器的identifyCategory方法进行匹配
+            const catID = this.csvMatcher.identifyCategory(filename, null, posAnalysis, matchOptions);
 
-                return {
-                    catID: matchResult.catID,
-                    catShort: matchResult.catShort,
-                    category: matchResult.category,
-                    category_zh: matchResult.categoryNameZh,
-                    subCategory: matchResult.source,
-                    subCategory_zh: matchResult.target
-                };
+            if (catID) {
+                // 查找对应的术语
+                const term = this.csvMatcher.findTermByCatID(catID);
+                if (term) {
+                    console.log(`使用智能匹配成功: ${filename} -> ${catID}`);
+
+                    return {
+                        catID: term.catID,
+                        catShort: term.catShort,
+                        category: term.category,
+                        category_zh: term.categoryNameZh,
+                        subCategory: term.source,
+                        subCategory_zh: term.target
+                    };
+                }
             }
+        } catch (error) {
+            console.error('匹配过程中出错:', error);
         }
 
-        // 如果基于分词系统的匹配失败，回退到传统的多词匹配算法
-        const matchResult = this.multiWordMatch(filename);
+        // 如果智能匹配失败，尝试直接使用findMatch方法
+        const matchResult = this.csvMatcher.findMatch(filename, posAnalysis);
 
         if (matchResult) {
-            console.log(`使用多词匹配算法匹配成功: ${filename} -> ${matchResult.catID}`);
+            console.log(`使用直接匹配成功: ${filename} -> ${matchResult.catID}`);
 
-            // 创建新的分类信息
             return {
                 catID: matchResult.catID,
                 catShort: matchResult.catShort,
@@ -710,23 +447,6 @@ class SmartClassifier {
                 category_zh: matchResult.categoryNameZh,
                 subCategory: matchResult.source,
                 subCategory_zh: matchResult.target
-            };
-        }
-
-        // 如果多词匹配失败，尝试使用单词匹配
-        const keywordMatch = this.matchByKeywords(filename);
-
-        if (keywordMatch) {
-            console.log(`使用关键词匹配算法匹配成功: ${filename} -> ${keywordMatch.catID}`);
-
-            // 创建新的分类信息
-            return {
-                catID: keywordMatch.catID,
-                catShort: keywordMatch.catShort,
-                category: keywordMatch.category,
-                category_zh: keywordMatch.categoryNameZh,
-                subCategory: keywordMatch.source,
-                subCategory_zh: keywordMatch.target
             };
         }
 
@@ -768,51 +488,51 @@ class SmartClassifier {
             translatedPosAnalysis = this.analyzePos(options.translatedText);
         }
 
-        // 使用双语匹配
-        if ((matchStrategy === 'auto' || matchStrategy === 'bilingual') &&
-            options.translatedText && this.csvMatcher) {
+        // 准备匹配选项
+        const matchOptions = {
+            ...options,
+            usePosAnalysis: true
+        };
 
-            // 准备双语匹配选项
-            const bilingualOptions = {
-                translatedText: options.translatedText,
-                translatedPosAnalysis: translatedPosAnalysis
-            };
-
-            try {
-                // 使用CSV匹配器的identifyCategory方法，传入双语匹配选项
-                const catID = await this.csvMatcher.identifyCategory(filename, null, originalPosAnalysis, bilingualOptions);
-
-                if (catID) {
-                    // 查找对应的术语
-                    const term = this.csvMatcher.findTermByCatID(catID);
-                    if (term) {
-                        console.log(`使用双语匹配成功: ${filename} -> ${catID}`);
-
-                        return {
-                            catID: term.catID,
-                            catShort: term.catShort,
-                            category: term.category,
-                            category_zh: term.categoryNameZh,
-                            subCategory: term.source,
-                            subCategory_zh: term.target
-                        };
-                    }
-                }
-            } catch (error) {
-                console.error('双语匹配失败:', error);
+        // 使用identifyCategory方法进行智能匹配
+        try {
+            // 根据匹配策略准备不同的选项
+            if (options.translatedText && (matchStrategy === 'auto' || matchStrategy === 'bilingual')) {
+                // 双语匹配选项
+                matchOptions.translatedText = options.translatedText;
+                matchOptions.translatedPosAnalysis = translatedPosAnalysis;
             }
+
+            // 使用CSV匹配器的identifyCategory方法进行匹配
+            const catID = await this.csvMatcher.identifyCategory(filename, null, originalPosAnalysis, matchOptions);
+
+            if (catID) {
+                // 查找对应的术语
+                const term = this.csvMatcher.findTermByCatID(catID);
+                if (term) {
+                    console.log(`使用智能匹配成功: ${filename} -> ${catID}`);
+
+                    return {
+                        catID: term.catID,
+                        catShort: term.catShort,
+                        category: term.category,
+                        category_zh: term.categoryNameZh,
+                        subCategory: term.source,
+                        subCategory_zh: term.target
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('智能匹配失败:', error);
         }
 
-        // 使用基于分词系统的匹配
-        if ((matchStrategy === 'auto' || matchStrategy === 'pos') &&
-            originalPosAnalysis && originalPosAnalysis.length > 0 && this.csvMatcher) {
+        // 如果智能匹配失败，尝试其他匹配方式
 
-            // 使用CSV匹配器的findMatch方法，传入词性分析结果
+        // 尝试使用原始文本直接匹配
+        if (originalPosAnalysis && originalPosAnalysis.length > 0) {
             const matchResult = this.csvMatcher.findMatch(filename, originalPosAnalysis);
-
             if (matchResult) {
-                console.log(`使用基于分词系统的匹配成功: ${filename} -> ${matchResult.catID}`);
-
+                console.log(`使用原始文本直接匹配成功: ${filename} -> ${matchResult.catID}`);
                 return {
                     catID: matchResult.catID,
                     catShort: matchResult.catShort,
@@ -824,16 +544,11 @@ class SmartClassifier {
             }
         }
 
-        // 使用翻译文本直接匹配
-        if ((matchStrategy === 'auto' || matchStrategy === 'translated') &&
-            options.translatedText && this.csvMatcher) {
-
-            // 直接使用翻译文本进行匹配
+        // 尝试使用翻译文本直接匹配
+        if (options.translatedText) {
             const translatedMatchResult = this.csvMatcher.findMatch(options.translatedText, translatedPosAnalysis);
-
             if (translatedMatchResult) {
                 console.log(`使用翻译文本直接匹配成功: ${options.translatedText} -> ${translatedMatchResult.catID}`);
-
                 return {
                     catID: translatedMatchResult.catID,
                     catShort: translatedMatchResult.catShort,
@@ -841,40 +556,6 @@ class SmartClassifier {
                     category_zh: translatedMatchResult.categoryNameZh,
                     subCategory: translatedMatchResult.source,
                     subCategory_zh: translatedMatchResult.target
-                };
-            }
-        }
-
-        // 使用多词匹配算法
-        if (matchStrategy === 'auto' || matchStrategy === 'multiWord') {
-            console.log(`尝试使用多词匹配算法: ${filename}`);
-
-            const multiWordResult = this.multiWordMatch(filename);
-            if (multiWordResult) {
-                return {
-                    catID: multiWordResult.catID,
-                    catShort: multiWordResult.catShort,
-                    category: multiWordResult.category,
-                    category_zh: multiWordResult.categoryNameZh,
-                    subCategory: multiWordResult.source,
-                    subCategory_zh: multiWordResult.target
-                };
-            }
-        }
-
-        // 使用关键词匹配
-        if (matchStrategy === 'auto' || matchStrategy === 'keyword') {
-            console.log(`尝试使用关键词匹配算法: ${filename}`);
-
-            const keywordResult = this.matchByKeywords(filename);
-            if (keywordResult) {
-                return {
-                    catID: keywordResult.catID,
-                    catShort: keywordResult.catShort,
-                    category: keywordResult.category,
-                    category_zh: keywordResult.categoryNameZh,
-                    subCategory: keywordResult.source,
-                    subCategory_zh: keywordResult.target
                 };
             }
         }
