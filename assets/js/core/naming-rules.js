@@ -1,6 +1,10 @@
+
 /**
  * 命名规则引擎
  * 用于格式化和验证文件名
+ *
+ * 依赖：
+ * - NamingUtils: 命名工具类，提供文本规范化和命名风格处理
  */
 class NamingRules {
     /**
@@ -244,61 +248,34 @@ class NamingRules {
         if (elements.category_zh) {
             // 优先使用文件对象中的categoryNameZh属性，如果没有则使用默认映射
             const categoryZh = file.categoryNameZh || this._getCategoryChineseName(category);
-            // 去除多余空格
-            parts.push(categoryZh.replace(/\s+/g, '').trim());
+            // 使用NamingUtils规范化中文文本
+            parts.push(NamingUtils.normalizeChineseText(categoryZh, false));
         }
 
         if (elements.subCategory && file.subCategory) {
-            parts.push(file.subCategory.replace(/\s+/g, '').trim());
+            // 使用NamingUtils规范化英文文本
+            parts.push(NamingUtils.normalizeEnglishText(file.subCategory, false));
         }
 
         if (elements.subCategory_zh && file.subCategoryTranslated) {
-            parts.push(file.subCategoryTranslated.replace(/\s+/g, '').trim());
+            // 使用NamingUtils规范化中文文本
+            parts.push(NamingUtils.normalizeChineseText(file.subCategoryTranslated, false));
         }
 
         if (elements.fxName) {
             // 使用标准化的英文描述（如果有），否则使用不带序号的文件名
             let fxName = file.standardizedName || file.nameWithoutNumber || file.name;
 
-            // 根据命名风格格式化FXName
-            if (this.settings.namingStyle && this.settings.namingStyle !== 'none') {
-                // 先清理文本，确保正确分割单词
-                fxName = fxName.replace(/\s+/g, ' ').trim();
+            // 使用NamingUtils应用命名风格
+            fxName = NamingUtils.applyNamingStyle(
+                fxName,
+                this.settings.namingStyle,
+                this.settings.customSeparator
+            );
 
-                // 分割单词
-                const words = fxName.split(/\s+/);
-
-                switch (this.settings.namingStyle) {
-                    case 'camelCase':
-                        fxName = words.map((word, index) => {
-                            if (index === 0) {
-                                return word.toLowerCase();
-                            }
-                            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-                        }).join('');
-                        break;
-
-                    case 'PascalCase':
-                        fxName = words.map(word => {
-                            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-                        }).join('');
-                        break;
-
-                    case 'snake_case':
-                        fxName = words.map(word => word.toLowerCase()).join('_');
-                        break;
-
-                    case 'kebab-case':
-                        fxName = words.map(word => word.toLowerCase()).join('-');
-                        break;
-
-                    case 'custom':
-                        fxName = words.join(this.settings.customSeparator || '_');
-                        break;
-                }
-            } else {
-                // 如果没有命名风格，只清理空格
-                fxName = fxName.replace(/\s+/g, ' ').trim();
+            // 如果没有命名风格，规范化英文文本
+            if (!this.settings.namingStyle || this.settings.namingStyle === 'none') {
+                fxName = NamingUtils.normalizeEnglishText(fxName, false);
             }
 
             parts.push(fxName);
@@ -306,8 +283,8 @@ class NamingRules {
 
         if (elements.fxName_zh && file.translatedName) {
             // 使用翻译后的文件名（不带序号）
-            // 确保去除多余空格
-            const translatedName = file.translatedName.replace(/\s+/g, '').trim();
+            // 使用NamingUtils规范化中文文本
+            const translatedName = NamingUtils.normalizeChineseText(file.translatedName, false);
             parts.push(translatedName);
         }
 

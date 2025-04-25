@@ -1,3 +1,4 @@
+
 /**
  * 文件处理器
  * 用于处理音效文件的获取、筛选和重命名
@@ -223,22 +224,7 @@ class FileProcessor {
         return lastDotIndex === -1 ? filename : filename.substring(0, lastDotIndex);
     }
 
-    /**
-     * 检测文件名是否为中文
-     * @param {string} filename - 文件名
-     * @returns {boolean} 是否为中文文件名
-     * @private
-     */
-    _isChineseFilename(filename) {
-        if (!filename) return false;
-
-        // 中文字符范围
-        const chineseRegex = /[\u4e00-\u9fa5]/g;
-        const chineseChars = filename.match(chineseRegex) || [];
-
-        // 如果中文字符占比超过40%，认为是中文文件名
-        return chineseChars.length / filename.length > 0.4;
-    }
+    // 注意：_isChineseFilename 方法已被移除，使用 NamingUtils.isChineseText 替代
 
     /**
      * 处理文件名，提取序号和准备翻译
@@ -247,28 +233,31 @@ class FileProcessor {
      * @private
      */
     async _processFileName(file) {
-        // 检测是否为中文文件名
-        const isChinese = this._isChineseFilename(file.name);
-        file.isChinese = isChinese;
-
-        // 从文件名中提取序号
-        const nameParts = NumberExtractor.extractNumber(file.name);
-        file.nameWithoutNumber = nameParts.text;
-        file.numberPart = nameParts.number;
-        file.numberFormat = {
-            prefix: nameParts.prefix || false,
-            suffix: nameParts.suffix || ''
+        // 使用NamingUtils处理文件名
+        const options = {
+            useUCS: this.namingRules && this.namingRules.settings && this.namingRules.settings.useUCS,
+            namingStyle: this.namingRules && this.namingRules.settings && this.namingRules.settings.namingStyle,
+            customSeparator: this.namingRules && this.namingRules.settings && this.namingRules.settings.customSeparator,
+            keepSpaces: false
         };
 
-        if (isChinese) {
+        // 处理基本命名属性
+        const processedFile = NamingUtils.processFileName(file, options);
+
+        // 更新文件对象
+        file.isChinese = processedFile.isChinese;
+        file.nameWithoutNumber = processedFile.nameWithoutNumber;
+        file.numberPart = processedFile.numberPart;
+        file.numberFormat = processedFile.numberFormat;
+
+        if (file.isChinese) {
             // 处理中文文件名
             Logger.info(`检测到中文文件名: ${file.name}`);
             file.originalChineseName = file.name;
 
             try {
                 // 清理中文文件名
-                let cleanName = file.nameWithoutNumber.replace(/\s+/g, '').trim();
-                file.translatedName = cleanName;
+                file.translatedName = NamingUtils.normalizeChineseText(file.nameWithoutNumber, false);
 
                 // 如果有序号，添加到翻译后的名称
                 if (file.numberPart) {
@@ -278,7 +267,9 @@ class FileProcessor {
                 // 反向翻译为英文，用于分类匹配和标准化
                 const englishName = await this.translationService.reverseTranslate(file.nameWithoutNumber);
                 file.reversedEnglishName = englishName;
-                file.standardizedName = englishName; // 对于中文文件名，使用反向翻译的英文名作为标准化名称
+
+                // 标准化英文名
+                file.standardizedName = NamingUtils.normalizeEnglishText(englishName, false);
 
                 // 使用中心化的匹配逻辑处理中文文件名
                 if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded && this.smartClassifier) {
@@ -325,8 +316,23 @@ class FileProcessor {
                 // 生成标准化的英文描述
                 let standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
 
-                // 确保应用命名风格
-                standardizedName = this.translationService.formatText(standardizedName);
+                // 应用命名风格和规范化
+                const options = {
+                    useUCS: this.namingRules && this.namingRules.settings && this.namingRules.settings.useUCS,
+                    namingStyle: this.translationService.settings.namingStyle,
+                    customSeparator: this.translationService.settings.customSeparator,
+                    keepSpaces: false
+                };
+
+                standardizedName = NamingUtils.applyNamingStyle(
+                    standardizedName,
+                    options.namingStyle,
+                    options.customSeparator
+                );
+
+                if (options.useUCS) {
+                    standardizedName = NamingUtils.normalizeEnglishText(standardizedName, false);
+                }
 
                 file.standardizedName = standardizedName;
             } catch (error) {
@@ -342,23 +348,24 @@ class FileProcessor {
         // 直接使用翻译服务处理FXname_zh
         try {
             // 清理文件名用于翻译
-            let cleanName = file.nameWithoutNumber
-                .replace(/\b\d+\b/g, '') // 移除数字序号
-                .replace(/\s+/g, ' ')    // 规范化空格
-                .trim();                 // 移除首尾空格
+            let cleanName = NamingUtils.normalizeEnglishText(file.nameWithoutNumber, true);
 
             // 翻译清理后的文件名
             file.translatedName = await this.translationService.translate(cleanName);
 
             // 处理翻译结果
             if (file.translatedName) {
-                // 规范化空格
-                file.translatedName = file.translatedName.replace(/\s+/g, ' ').trim();
+                // 规范化中文文本
+                const options = {
+                    useUCS: this.namingRules && this.namingRules.settings && this.namingRules.settings.useUCS,
+                    keepSpaces: false
+                };
+
+                file.translatedName = NamingUtils.normalizeChineseText(file.translatedName, options.keepSpaces);
 
                 // 如果原文件名中包含数字，添加到翻译后的名称
-                const numberMatch = file.nameWithoutNumber.match(/\b(\d+)\b/);
-                if (numberMatch) {
-                    file.translatedName = `${file.translatedName}${numberMatch[1]}`;
+                if (file.numberPart) {
+                    file.translatedName = `${file.translatedName}${file.numberPart}`;
                 }
             }
         } catch (error) {
