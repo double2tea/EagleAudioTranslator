@@ -482,6 +482,15 @@
                     useMultiLanguage: false
                 };
 
+                // 输出分词器配置（仅在调试模式下）
+                if (this.options.debug) {
+                    console.log('【阿里云NLP】当前分词器配置:', {
+                        useBasicChinese: tokenizerConfig.useBasicChinese,
+                        useAdvancedChinese: tokenizerConfig.useAdvancedChinese,
+                        useMultiLanguage: tokenizerConfig.useMultiLanguage
+                    });
+                }
+
                 // 处理中文文本
                 if (hasChinese) {
                     // 优先使用高级版中文分词（如果启用）
@@ -517,27 +526,37 @@
                     }
                 }
 
-                // 处理英文文本（如果启用多语言分词且没有中文或中文处理失败）
-                if (hasEnglish && tokenizerConfig.useMultiLanguage && (tagResult.length === 0 || !hasChinese)) {
+                // 处理英文文本
+                if (hasEnglish && !hasChinese) {
+                    // 对于纯英文文本，我们总是返回空结果，让调用者使用本地compromise.js处理
+                    // 这样可以确保词性标注的准确性
+                    if (this.options.debug) {
+                        console.log('【阿里云NLP】纯英文文本，将由本地compromise.js处理词性标注');
+                    }
+                    return [];
+                }
+
+                // 处理混合文本（中英文混合）
+                if (hasEnglish && hasChinese && (tokenizerConfig.useMultiLanguage === true)) {
                     try {
+                        // 对于中英文混合文本，我们可以使用多语言分词API进行分词
+                        // 但不使用其词性标注结果
                         const englishResult = await this.tokenizeMultiLanguage(text, 'en');
                         if (englishResult && englishResult.length > 0) {
-                            // 由于多语言分词API可能不返回词性，我们需要手动添加
-                            const formattedResult = englishResult.map(item => ({
-                                w: item.word,
-                                p: 'NN' // 默认为名词
-                            }));
-                            tagResult = tagResult.concat(formattedResult);
+                            if (this.options.debug) {
+                                console.log('【阿里云NLP】获取到多语言分词结果，但不使用其词性标注');
+                            }
+
+                            // 我们只提取分词结果，不添加词性标注
+                            // 这些分词结果将与中文分词结果合并
+                            // 但我们不会将这些结果添加到tagResult中
+                            // 因为我们希望调用者使用compromise.js来处理英文部分的词性标注
                         }
                     } catch (englishError) {
-                        // 英文处理失败，让调用者使用本地compromise.js处理
-                        if (hasEnglish && !hasChinese) {
-                            throw new Error('阿里云NLP多语言分词失败，请使用本地处理');
+                        if (this.options.debug) {
+                            console.log('【阿里云NLP】多语言分词失败:', englishError.message);
                         }
                     }
-                } else if (hasEnglish && !hasChinese) {
-                    // 如果有英文但没有启用多语言分词，让调用者使用本地compromise.js处理
-                    throw new Error('阿里云NLP未启用多语言分词，请使用本地处理');
                 }
 
                 // 如果所有方法都失败，尝试使用基础版词性标注作为最后的回退
@@ -638,6 +657,13 @@
             // 使用深拷贝避免引用问题
             const newOptions = JSON.parse(JSON.stringify(options));
 
+            // 特殊处理tokenizer配置，确保它被正确合并
+            if (newOptions.tokenizer) {
+                this.options.tokenizer = Object.assign({}, this.options.tokenizer || {}, newOptions.tokenizer);
+                // 删除newOptions中的tokenizer，避免下面的Object.assign覆盖整个tokenizer对象
+                delete newOptions.tokenizer;
+            }
+
             // 更新配置
             this.options = Object.assign({}, this.options, newOptions);
 
@@ -658,7 +684,8 @@
                     accessKeySecret: this.options.accessKeySecret ? '******' : '未设置',
                     region: this.options.region,
                     proxyUrl: this.options.proxyUrl,
-                    maxRequestPerDay: this.maxRequestPerDay
+                    maxRequestPerDay: this.maxRequestPerDay,
+                    tokenizer: this.options.tokenizer
                 });
             }
         }

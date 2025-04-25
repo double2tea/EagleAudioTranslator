@@ -129,6 +129,8 @@ class PreviewPanel {
                 return '失败';
             case 'processing':
                 return '处理中';
+            case 'matching_complete':
+                return '匹配完成';
             case 'pending':
             default:
                 return '待处理';
@@ -143,8 +145,33 @@ class PreviewPanel {
      */
     _createAlternateMatchDropdown(file) {
         // 如果文件还没有匹配结果或者正在处理中，显示等待消息
-        if (!file.matchResults || file.matchResults.length === 0 || file.status === 'processing' || file.status === 'pending') {
-            return '等待匹配...';
+        if (!file.matchResults || file.matchResults.length === 0) {
+            // 检查文件是否已经匹配成功但UI未更新
+            if (file.matchSuccessful === true) {
+                console.log(`文件 "${file.originalName}" 已匹配成功，但UI未更新`);
+                // 创建一个默认的匹配结果，确保UI能够显示
+                if (!file.matchResults) {
+                    file.matchResults = [{
+                        term: {
+                            catID: file.catID || 'UNKNOWN',
+                            catShort: file.category || 'UNK',
+                            category: file.categoryName || 'Unknown',
+                            categoryNameZh: file.categoryNameZh || '未知',
+                            source: file.subCategory || file.nameWithoutNumber || '',
+                            target: file.subCategoryTranslated || file.translatedName || ''
+                        },
+                        score: 100,
+                        matchSource: 'default',
+                        priority: 10
+                    }];
+                    file.availableMatchCount = 1;
+                    file.currentMatchRank = 0;
+                }
+            } else if (file.status === 'processing' || file.status === 'pending') {
+                return '等待匹配...';
+            } else {
+                return '无匹配结果';
+            }
         }
 
         // 创建下拉菜单
@@ -187,7 +214,11 @@ class PreviewPanel {
         // 更新CatID
         const catIdCell = row.querySelector('.cat-id');
         if (catIdCell) {
-            catIdCell.textContent = file.catID || '等待分类...';
+            if (file.matchSuccessful && file.catID) {
+                catIdCell.textContent = file.catID;
+            } else {
+                catIdCell.textContent = file.catID || '等待分类...';
+            }
         }
 
         // 更新替代匹配下拉菜单

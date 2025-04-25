@@ -151,9 +151,18 @@ class SmartClassifier {
                 if (posResult && posResult.length > 0) {
                     result.push(...posResult);
                     aliyunSuccess = true;
+                } else {
+                    // 阿里云NLP返回空结果，可能是纯英文文本或其他原因
+                    if (this.classificationSettings.aliyunNLP.debug) {
+                        console.log(`【分词】阿里云NLP服务返回空结果，将使用本地处理`);
+                    }
                 }
             } catch (error) {
-                console.warn(`【分词】阿里云NLP服务分词失败`);
+                if (this.classificationSettings.aliyunNLP.debug) {
+                    console.warn(`【分词】阿里云NLP服务分词失败: ${error.message}`);
+                } else {
+                    console.warn(`【分词】阿里云NLP服务分词失败`);
+                }
             }
         }
 
@@ -174,6 +183,10 @@ class SmartClassifier {
                     englishText = englishText.replace(/_/g, ' ');
 
                     if (englishText.trim().length > 0) {
+                        if (this.classificationSettings.aliyunNLP.debug) {
+                            console.log(`【分词】使用本地compromise.js处理英文文本: "${englishText}"`);
+                        }
+
                         const doc = this.nlpProcessor(englishText);
                         const allTerms = doc.terms();
 
@@ -194,11 +207,17 @@ class SmartClassifier {
 
                                 words.forEach(word => {
                                     if (word && word.trim() && !SmartClassifier.ENGLISH_STOP_WORDS.has(word.toLowerCase())) {
-                                        result.push({
+                                        const wordObj = {
                                             word: word.toLowerCase().trim(),
                                             pos: posType.pos,
                                             weight: this.classificationSettings.posWeights[posType.pos]
-                                        });
+                                        };
+
+                                        if (this.classificationSettings.aliyunNLP.debug) {
+                                            console.log(`【分词】compromise.js识别词 "${word}" 的词性: ${posType.pos}, 权重: ${this.classificationSettings.posWeights[posType.pos]}`);
+                                        }
+
+                                        result.push(wordObj);
                                     }
                                 });
                             } catch (e) { /* 忽略错误 */ }
@@ -549,7 +568,9 @@ class SmartClassifier {
                     accessKeyId: this.classificationSettings.aliyunNLP.accessKeyId,
                     accessKeySecret: this.classificationSettings.aliyunNLP.accessKeySecret,
                     enabled: this.classificationSettings.aliyunNLP.enabled,
-                    debug: this.classificationSettings.aliyunNLP.debug
+                    debug: this.classificationSettings.aliyunNLP.debug,
+                    // 添加分词器配置
+                    tokenizer: this.classificationSettings.aliyunNLP.tokenizer
                 };
 
                 this.aliyunNLPAdapter.setOptions(options);
@@ -565,7 +586,9 @@ class SmartClassifier {
                         accessKeyId: this.classificationSettings.aliyunNLP.accessKeyId,
                         accessKeySecret: this.classificationSettings.aliyunNLP.accessKeySecret,
                         enabled: this.classificationSettings.aliyunNLP.enabled,
-                        debug: this.classificationSettings.aliyunNLP.debug
+                        debug: this.classificationSettings.aliyunNLP.debug,
+                        // 添加分词器配置
+                        tokenizer: this.classificationSettings.aliyunNLP.tokenizer
                     };
 
                     // 使用阿里云NLP适配器

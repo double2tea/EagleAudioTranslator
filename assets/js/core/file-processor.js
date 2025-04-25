@@ -589,7 +589,19 @@ class FileProcessor {
                                     // 更新匹配状态
                                     file.matchSuccessful = true;
 
+                                    // 确保文件状态更新，以便UI能够正确显示
+                                    if (file.status === 'processing' || file.status === 'pending') {
+                                        file.status = 'matching_complete';
+                                    }
+
                                     console.log(`文件 "${file.name}" 使用中心化匹配逻辑成功: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
+
+                                    // 如果提供了回调函数，立即通知UI更新
+                                    if (typeof onFileProcessed === 'function') {
+                                        setTimeout(() => {
+                                            onFileProcessed(fileObjects, i);
+                                        }, 0);
+                                    }
                                 } else {
                                     console.log(`文件 "${file.name}" 中心化匹配逻辑未找到匹配结果`);
                                 }
