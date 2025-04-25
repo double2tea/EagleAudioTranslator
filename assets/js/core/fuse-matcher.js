@@ -17,14 +17,7 @@ class FuseMatcher {
         this.fuseIndex = null;
         this.options = options;
 
-        // 初始化AI分类器相关属性
-        this.aiClassifier = {
-            useAIClassification: false,
-            init: function(enabled) {
-                this.useAIClassification = enabled;
-                return this;
-            }
-        };
+        // 初始化AI分类器和匹配设置
         this.useAIClassification = false;
         this.classifier = null;
 
@@ -187,11 +180,6 @@ class FuseMatcher {
      * 初始化 Fuse.js 索引
      */
     initialize() {
-        console.log('开始初始化 FuseMatcher...');
-        console.log('terms 类型:', typeof this.terms);
-        console.log('terms 是否为数组:', Array.isArray(this.terms));
-        console.log('terms 长度:', this.terms ? this.terms.length : 0);
-
         if (!this.terms || !Array.isArray(this.terms) || this.terms.length === 0) {
             console.warn('术语数据为空或格式不正确，无法初始化 Fuse.js 索引');
             return;
@@ -204,11 +192,6 @@ class FuseMatcher {
                 return;
             }
 
-            console.log('Fuse 类型:', typeof Fuse);
-            console.log('Fuse 构造函数:', Fuse.toString().substring(0, 100) + '...');
-            console.log('术语数据示例:', JSON.stringify(this.terms[0]));
-            console.log('Fuse 选项:', JSON.stringify(this.fuseOptions));
-
             // 创建 Fuse 索引
             this.fuseIndex = new Fuse(this.terms, this.fuseOptions);
             this.initialized = true;
@@ -218,8 +201,6 @@ class FuseMatcher {
             this.initSmartClassifier();
         } catch (error) {
             console.error('初始化 Fuse.js 索引时出错:', error);
-            console.error('错误详情:', error.message);
-            console.error('错误堆栈:', error.stack);
         }
     }
 
@@ -231,49 +212,32 @@ class FuseMatcher {
             // 检查是否已经有SmartClassifier实例
             let existingClassifier = null;
 
-            // 首先检查全局状态中是否有SmartClassifier实例
-            if (window.pluginState && window.pluginState.csvMatcher && window.pluginState.csvMatcher.smartClassifier) {
-                console.log('使用全局状态中的SmartClassifier实例');
-                existingClassifier = window.pluginState.csvMatcher.smartClassifier;
-            }
-            // 如果没有，检查文件处理器中是否有SmartClassifier实例
-            else if (window.pluginState && window.pluginState.fileProcessor && window.pluginState.fileProcessor.smartClassifier) {
-                console.log('使用文件处理器中的SmartClassifier实例');
-                existingClassifier = window.pluginState.fileProcessor.smartClassifier;
+            // 检查全局状态中是否有SmartClassifier实例
+            if (window.pluginState) {
+                if (window.pluginState.csvMatcher && window.pluginState.csvMatcher.smartClassifier) {
+                    existingClassifier = window.pluginState.csvMatcher.smartClassifier;
+                } else if (window.pluginState.fileProcessor && window.pluginState.fileProcessor.smartClassifier) {
+                    existingClassifier = window.pluginState.fileProcessor.smartClassifier;
+                }
             }
 
-            // 如果找到了现有实例，使用它
+            // 使用现有实例或创建新实例
             if (existingClassifier) {
                 this.smartClassifier = existingClassifier;
-                console.log('FuseMatcher使用现有的SmartClassifier实例');
-            }
-            // 如果没有找到现有实例，创建一个新的实例
-            else if (typeof SmartClassifier !== 'undefined') {
-                console.log('FuseMatcher创建新的SmartClassifier实例');
+            } else if (typeof SmartClassifier !== 'undefined') {
                 this.smartClassifier = new SmartClassifier(this);
 
-                // 如果有全局状态，也设置到全局状态中
-                if (window.pluginState && window.pluginState.csvMatcher) {
-                    window.pluginState.csvMatcher.smartClassifier = this.smartClassifier;
+                // 将实例共享到全局状态
+                if (window.pluginState) {
+                    if (window.pluginState.csvMatcher) {
+                        window.pluginState.csvMatcher.smartClassifier = this.smartClassifier;
+                    }
+                    if (window.pluginState.fileProcessor) {
+                        window.pluginState.fileProcessor.smartClassifier = this.smartClassifier;
+                    }
                 }
-
-                // 如果有文件处理器，也设置到文件处理器中
-                if (window.pluginState && window.pluginState.fileProcessor) {
-                    window.pluginState.fileProcessor.smartClassifier = this.smartClassifier;
-                }
-
-                console.log('SmartClassifier初始化成功');
             } else {
                 console.warn('SmartClassifier类不可用，无法初始化智能分类器');
-            }
-
-            // 输出smartClassifier的状态，用于调试
-            if (this.smartClassifier) {
-                console.log('FuseMatcher中的SmartClassifier实例状态:', {
-                    initialized: this.smartClassifier.initialized,
-                    hasAliyunNLPAdapter: !!this.smartClassifier.aliyunNLPAdapter,
-                    aliyunNLPAdapterInitialized: this.smartClassifier.aliyunNLPAdapter ? this.smartClassifier.aliyunNLPAdapter.initialized : false
-                });
             }
         } catch (error) {
             console.error('初始化SmartClassifier时出错:', error);
@@ -465,21 +429,10 @@ class FuseMatcher {
             const originalResults = originalText ? this.fuseIndex.search(originalText) : [];
             const translatedResults = translatedText ? this.fuseIndex.search(translatedText) : [];
 
-            // 输出调试日志
-            console.log(`双语匹配搜索结果:`, {
-                originalText,
-                translatedText,
-                originalResults: originalResults.slice(0, 3).map(r => ({
-                    item: r.item.source,
-                    catID: r.item.catID,
-                    score: 1 - r.score
-                })),
-                translatedResults: translatedResults.slice(0, 3).map(r => ({
-                    item: r.item.source,
-                    catID: r.item.catID,
-                    score: 1 - r.score
-                }))
-            });
+            // 简化的调试日志
+            if (originalResults.length > 0 || translatedResults.length > 0) {
+                console.log(`双语匹配搜索结果: 原文匹配=${originalResults.length}, 译文匹配=${translatedResults.length}`);
+            }
 
             // 如果两者都没有结果，返回未匹配
             if ((!originalResults || originalResults.length === 0) &&
@@ -657,67 +610,9 @@ class FuseMatcher {
             console.log(`[匹配引擎] 双语匹配分数 ${bestMatch.score.toFixed(1)} 高于阈值 ${threshold}，匹配成功`);
 
 
-            // 输出详细的匹配调试信息
+            // 简化的匹配结果输出
             if (sortedResults.length > 0) {
-                try {
-                    // 安全地提取bestMatch信息
-                    const bestMatchInfo = {
-                        catID: bestMatch.catID,
-                        score: bestMatch.score
-                    };
-
-                    // 安全地添加term信息
-                    if (bestMatch.term) {
-                        bestMatchInfo.term = {
-                            catID: bestMatch.term.catID,
-                            source: bestMatch.term.source,
-                            target: bestMatch.term.target
-                        };
-                    }
-
-                    // 安全地添加匹配详情
-                    if (bestMatch.matchDetails) {
-                        bestMatchInfo.matchDetails = bestMatch.matchDetails;
-                    }
-
-                    // 安全地添加分数调整信息
-                    if (bestMatch.scoreAdjustment) {
-                        bestMatchInfo.scoreAdjustment = bestMatch.scoreAdjustment;
-                    }
-
-                    // 安全地提取备选匹配信息
-                    const topAlternatives = sortedResults.slice(1, 3).map(match => {
-                        const altInfo = {
-                            catID: match.catID,
-                            score: match.score
-                        };
-
-                        // 安全地添加term信息
-                        if (match.term) {
-                            altInfo.term = {
-                                catID: match.term.catID,
-                                source: match.term.source,
-                                target: match.term.target
-                            };
-                        }
-
-                        // 安全地添加匹配详情
-                        if (match.matchDetails) {
-                            altInfo.matchDetails = match.matchDetails;
-                        }
-
-                        return altInfo;
-                    });
-
-                    console.log('[匹配引擎] 详细匹配结果:', {
-                        originalText,
-                        translatedText,
-                        bestMatch: bestMatchInfo,
-                        topAlternatives: topAlternatives
-                    });
-                } catch (logError) {
-                    console.warn('输出匹配详情时出错:', logError);
-                }
+                console.log(`[匹配引擎] 最佳匹配: ${bestMatch.catID}, 分数: ${bestMatch.score.toFixed(1)}, 总匹配数: ${sortedResults.length}`);
             }
 
             // 返回匹配结果
@@ -766,9 +661,7 @@ class FuseMatcher {
         }
 
         // 查找匹配的术语
-        const matchingTerm = this.terms.find(term => term.catID === catID);
-
-        return matchingTerm || null;
+        return this.terms.find(term => term.catID === catID) || null;
     }
 
     /**
@@ -777,14 +670,7 @@ class FuseMatcher {
      * @returns {boolean} 是否有效
      */
     isValidCatID(catID) {
-        if (!this.initialized || !catID) {
-            return false;
-        }
-
-        // 查找匹配的术语
-        const matchingTerm = this.terms.find(term => term.catID === catID);
-
-        return !!matchingTerm;
+        return !!this.findTermByCatID(catID);
     }
 
     /**
@@ -793,56 +679,21 @@ class FuseMatcher {
      * @returns {FuseMatcher} 当前实例，支持链式调用
      */
     setAIClassifier(enabled) {
-        console.log('设置AI辅助分类器状态:', enabled, 'AIClassifier类是否可用:', typeof window !== 'undefined' && !!window.AIClassifier);
-
         // 存储AI分类器状态
         this.useAIClassification = enabled;
 
         // 更新matchSettings属性
         if (this.matchSettings) {
             this.matchSettings.useAIClassification = enabled;
-        } else {
-            this.matchSettings = {
-                useAIClassification: enabled,
-                matchStrategy: 'auto'
-            };
         }
-
-        // 确保aiClassifier存在
-        if (!this.aiClassifier) {
-            this.aiClassifier = {
-                useAIClassification: enabled,
-                init: function(value) {
-                    this.useAIClassification = value;
-                    return this;
-                }
-            };
-        }
-
-        // 更新aiClassifier的状态
-        this.aiClassifier.useAIClassification = enabled;
 
         // 初始化AI分类器
         if (enabled && typeof window !== 'undefined' && window.AIClassifier) {
             try {
                 this.aiClassifier = new window.AIClassifier().init(enabled);
-                console.log('AI辅助分类器初始化成功', this.aiClassifier);
             } catch (error) {
                 console.error('AI辅助分类器初始化失败:', error);
-                // 如果初始化失败，确保至少有一个具有正确属性的对象
-                this.aiClassifier = {
-                    useAIClassification: enabled,
-                    init: function(value) {
-                        this.useAIClassification = value;
-                        return this;
-                    }
-                };
             }
-        } else {
-            console.log('AI辅助分类器已禁用或不可用', {
-                enabled: enabled,
-                aiClassifierAvailable: typeof window !== 'undefined' && !!window.AIClassifier
-            });
         }
 
         return this;
@@ -865,6 +716,28 @@ class FuseMatcher {
     }
 
     /**
+     * 尝试匹配名词
+     * @private
+     * @param {Array} nouns - 名词数组
+     * @returns {string|null} 匹配的分类ID或null
+     */
+    _tryMatchNouns(nouns) {
+        if (!nouns || nouns.length === 0) return null;
+
+        for (const noun of nouns) {
+            if (noun.word.length < 2) continue; // 跳过太短的词
+
+            const nounMatch = this.findMatch(noun.word, { threshold: 0.1 }); // 使用更低的阈值
+            if (nounMatch && nounMatch.matched) {
+                console.log(`[匹配引擎] 名词直接匹配成功: "${noun.word}" -> ${nounMatch.catID}`);
+                return nounMatch.catID;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 识别分类
      * @param {string} text - 要识别的文本
      * @param {Object} aiClassification - AI分类结果（可选）
@@ -873,70 +746,45 @@ class FuseMatcher {
      * @returns {string|null} 分类ID或null
      */
     identifyCategory(text, aiClassification = null, posAnalysis = null, options = {}) {
-        console.log(`[匹配引擎] 开始识别分类: "${text}"`);
-
         // 如果提供了AI分类结果，优先使用
         if (aiClassification && aiClassification.catID && this.isValidCatID(aiClassification.catID)) {
-            console.log(`[匹配引擎] 使用AI分类结果: ${text} -> ${aiClassification.catID}`);
             return aiClassification.catID;
         }
 
         // 检查是否为简单文件名（不包含空格或特殊字符）
         const isSimpleFilename = !/[\s\-_]/.test(text) && text.length < 15;
+        const hasValidPosAnalysis = posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0;
 
         // 如果是简单文件名，直接尝试关键词匹配
-        if (isSimpleFilename && posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
-            console.log(`[匹配引擎] 检测到简单文件名，直接尝试关键词匹配`);
-
+        if (isSimpleFilename && hasValidPosAnalysis) {
             // 尝试直接匹配名词
             const nouns = posAnalysis.filter(item => item.pos === 'noun');
-            if (nouns.length > 0) {
-                console.log(`[匹配引擎] 尝试直接匹配名词 (${nouns.length}个)`);
-
-                // 尝试匹配每个名词
-                for (const noun of nouns) {
-                    if (noun.word.length < 2) {
-                        continue; // 跳过太短的词
-                    }
-
-                    const nounMatch = this.findMatch(noun.word, { threshold: 0.1 }); // 使用更低的阈值
-                    if (nounMatch && nounMatch.matched) {
-                        console.log(`[匹配引擎] 名词直接匹配成功: "${noun.word}" -> ${nounMatch.catID}`);
-                        return nounMatch.catID;
-                    }
-                }
-            }
+            const nounMatchResult = this._tryMatchNouns(nouns);
+            if (nounMatchResult) return nounMatchResult;
 
             // 如果名词匹配失败，尝试直接匹配整个文本
             const directMatch = this.findMatch(text, { threshold: 0.1 });
             if (directMatch && directMatch.matched) {
-                console.log(`[匹配引擎] 直接匹配成功: "${text}" -> ${directMatch.catID}`);
                 return directMatch.catID;
             }
         }
 
         // 如果提供了翻译文本，使用双语匹配
         if (options.translatedText) {
-            console.log(`[匹配引擎] 使用双语匹配: "${text}" + "${options.translatedText}"`);
-
             // 如果提供了词性分析结果，将其添加到选项中
-            if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
+            if (hasValidPosAnalysis) {
                 options.posAnalysis = posAnalysis;
             }
 
             const bilingualMatch = this.findMatchWithBilingualText(text, options.translatedText, options);
-
             if (bilingualMatch && bilingualMatch.matched) {
-                console.log(`[匹配引擎] 双语匹配成功: "${text}" + "${options.translatedText}" -> ${bilingualMatch.catID}`);
                 return bilingualMatch.catID;
             }
         }
 
         // 使用单语匹配
-        console.log(`[匹配引擎] 使用单语匹配: "${text}"`);
-
         // 如果提供了词性分析结果，将其添加到选项中
-        if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
+        if (hasValidPosAnalysis) {
             options.posAnalysis = posAnalysis;
         }
 
@@ -944,33 +792,18 @@ class FuseMatcher {
         options.threshold = options.threshold || 0.2; // 单语匹配阈值
 
         const match = this.findMatch(text, options);
-
         if (match && match.matched) {
-            console.log(`[匹配引擎] 普通匹配成功: "${text}" -> ${match.catID}`);
             return match.catID;
-        } else {
-            // 如果词性分析结果中有名词，尝试直接匹配名词
-            if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
-                const nouns = posAnalysis.filter(item => item.pos === 'noun');
-                if (nouns.length > 0) {
-                    // 尝试匹配每个名词
-                    for (const noun of nouns) {
-                        if (noun.word.length < 2) {
-                            continue; // 跳过太短的词
-                        }
+        }
 
-                        const nounMatch = this.findMatch(noun.word, { threshold: 0.1 }); // 使用更低的阈值
-                        if (nounMatch && nounMatch.matched) {
-                            console.log(`[匹配引擎] 名词直接匹配成功: "${noun.word}" -> ${nounMatch.catID}`);
-                            return nounMatch.catID;
-                        }
-                    }
-                }
-            }
+        // 如果词性分析结果中有名词，尝试直接匹配名词
+        if (hasValidPosAnalysis) {
+            const nouns = posAnalysis.filter(item => item.pos === 'noun');
+            const nounMatchResult = this._tryMatchNouns(nouns);
+            if (nounMatchResult) return nounMatchResult;
         }
 
         // 如果所有匹配都失败，返回null
-        console.log(`[匹配引擎] 所有匹配策略都失败: ${text}`);
         return null;
     }
 }
