@@ -875,17 +875,44 @@ class FuseMatcher {
     identifyCategory(text, aiClassification = null, posAnalysis = null, options = {}) {
         console.log(`[匹配引擎] 开始识别分类: "${text}"`);
 
-        // 如果提供了词性分析结果，输出简要信息
-        if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
-            console.log(`[匹配引擎] 收到词性分析结果 (${posAnalysis.length}个词)`);
-        } else {
-            console.log(`[匹配引擎] 未提供词性分析结果`);
-        }
-
         // 如果提供了AI分类结果，优先使用
         if (aiClassification && aiClassification.catID && this.isValidCatID(aiClassification.catID)) {
             console.log(`[匹配引擎] 使用AI分类结果: ${text} -> ${aiClassification.catID}`);
             return aiClassification.catID;
+        }
+
+        // 检查是否为简单文件名（不包含空格或特殊字符）
+        const isSimpleFilename = !/[\s\-_]/.test(text) && text.length < 15;
+
+        // 如果是简单文件名，直接尝试关键词匹配
+        if (isSimpleFilename && posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
+            console.log(`[匹配引擎] 检测到简单文件名，直接尝试关键词匹配`);
+
+            // 尝试直接匹配名词
+            const nouns = posAnalysis.filter(item => item.pos === 'noun');
+            if (nouns.length > 0) {
+                console.log(`[匹配引擎] 尝试直接匹配名词 (${nouns.length}个)`);
+
+                // 尝试匹配每个名词
+                for (const noun of nouns) {
+                    if (noun.word.length < 2) {
+                        continue; // 跳过太短的词
+                    }
+
+                    const nounMatch = this.findMatch(noun.word, { threshold: 0.1 }); // 使用更低的阈值
+                    if (nounMatch && nounMatch.matched) {
+                        console.log(`[匹配引擎] 名词直接匹配成功: "${noun.word}" -> ${nounMatch.catID}`);
+                        return nounMatch.catID;
+                    }
+                }
+            }
+
+            // 如果名词匹配失败，尝试直接匹配整个文本
+            const directMatch = this.findMatch(text, { threshold: 0.1 });
+            if (directMatch && directMatch.matched) {
+                console.log(`[匹配引擎] 直接匹配成功: "${text}" -> ${directMatch.catID}`);
+                return directMatch.catID;
+            }
         }
 
         // 如果提供了翻译文本，使用双语匹配
@@ -895,51 +922,37 @@ class FuseMatcher {
             // 如果提供了词性分析结果，将其添加到选项中
             if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
                 options.posAnalysis = posAnalysis;
-                console.log(`[匹配引擎] 将词性分析结果添加到双语匹配选项中`);
-            }
-
-            // 如果提供了翻译文本的词性分析结果，输出简要信息
-            if (options.translatedPosAnalysis && Array.isArray(options.translatedPosAnalysis) && options.translatedPosAnalysis.length > 0) {
-                console.log(`[匹配引擎] 收到翻译文本词性分析结果 (${options.translatedPosAnalysis.length}个词)`);
             }
 
             const bilingualMatch = this.findMatchWithBilingualText(text, options.translatedText, options);
 
             if (bilingualMatch && bilingualMatch.matched) {
-                console.log(`[匹配引擎] 策略 2/6 - 双语匹配成功: "${text}" + "${options.translatedText}" -> ${bilingualMatch.catID}`);
+                console.log(`[匹配引擎] 双语匹配成功: "${text}" + "${options.translatedText}" -> ${bilingualMatch.catID}`);
                 return bilingualMatch.catID;
-            } else {
-                console.log(`[匹配引擎] 双语匹配失败，尝试单语匹配`);
             }
         }
 
-        // 否则使用单语匹配
+        // 使用单语匹配
         console.log(`[匹配引擎] 使用单语匹配: "${text}"`);
 
         // 如果提供了词性分析结果，将其添加到选项中
         if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
             options.posAnalysis = posAnalysis;
-            console.log(`[匹配引擎] 将词性分析结果添加到单语匹配选项中，共 ${posAnalysis.length} 个词`);
         }
 
         // 添加调试选项，降低匹配阈值
         options.threshold = options.threshold || 0.2; // 单语匹配阈值
-        console.log(`[匹配引擎] 单语匹配阈值: ${options.threshold}`);
 
         const match = this.findMatch(text, options);
 
         if (match && match.matched) {
-            console.log(`[匹配引擎] 策略 3/6 - 普通匹配成功: "${text}" -> ${match.catID}`);
+            console.log(`[匹配引擎] 普通匹配成功: "${text}" -> ${match.catID}`);
             return match.catID;
         } else {
-            console.log(`[匹配引擎] 单语匹配失败，尝试直接匹配关键词`);
-
             // 如果词性分析结果中有名词，尝试直接匹配名词
             if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
                 const nouns = posAnalysis.filter(item => item.pos === 'noun');
                 if (nouns.length > 0) {
-                    console.log(`[匹配引擎] 尝试直接匹配名词 (${nouns.length}个)`);
-
                     // 尝试匹配每个名词
                     for (const noun of nouns) {
                         if (noun.word.length < 2) {
@@ -952,8 +965,6 @@ class FuseMatcher {
                             return nounMatch.catID;
                         }
                     }
-
-                    console.log(`[匹配引擎] 名词直接匹配失败`);
                 }
             }
         }

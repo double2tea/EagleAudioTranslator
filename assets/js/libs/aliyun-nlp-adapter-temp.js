@@ -121,37 +121,32 @@
          * @private
          */
         async _sendRequest(action, params = {}) {
-            console.log(`【阿里云NLP】开始发送请求: action=${action}, params=`, params);
+            // 只在调试模式下输出详细日志
+            if (this.options.debug) {
+                console.log(`【阿里云NLP】开始发送请求: action=${action}`);
+            }
 
             try {
                 // 检查是否初始化
                 if (!this.initialized) {
-                    console.warn('【阿里云NLP】服务适配器未初始化');
                     throw new Error('阿里云NLP服务适配器未初始化');
                 }
 
                 // 检查请求限制
                 if (!this._checkRequestLimit()) {
-                    console.warn('【阿里云NLP】已达到请求限制');
                     throw new Error('已达到阿里云NLP请求限制');
                 }
 
                 // 检查必要的凭证
                 if (!this.options.accessKeyId || !this.options.accessKeySecret) {
-                    console.warn('【阿里云NLP】缺少必要的凭证');
                     throw new Error('缺少阿里云NLP服务必要的凭证');
                 }
 
                 // 使用代理服务器发送请求
                 try {
-                    if (this.options.debug) {
-                        console.log('【阿里云NLP】使用代理服务器发送请求...');
-                    }
-
                     // 检查代理服务器URL是否设置
                     let proxyUrl = this.options.proxyUrl || 'http://localhost:3456';
                     if (!proxyUrl) {
-                        console.error('【阿里云NLP】代理服务器URL未设置');
                         throw new Error('代理服务器URL未设置');
                     }
 
@@ -160,7 +155,6 @@
                         const backupPorts = [3457, 3458, 3459];
                         const backupPort = backupPorts[Math.floor(Math.random() * backupPorts.length)];
                         proxyUrl = `http://localhost:${backupPort}`;
-                        console.log(`【阿里云NLP】尝试使用备用端口: ${backupPort}`);
                     }
 
                     // 构建请求体
@@ -182,15 +176,6 @@
                         body: JSON.stringify(requestBody)
                     };
 
-                    if (this.options.debug) {
-                        console.log('【阿里云NLP】代理服务器URL:', proxyUrl);
-                        console.log('【阿里云NLP】请求体:', {
-                            ...requestBody,
-                            accessKeyId: requestBody.accessKeyId ? requestBody.accessKeyId.substring(0, 3) + '***' : undefined,
-                            accessKeySecret: requestBody.accessKeySecret ? '******' : undefined
-                        });
-                    }
-
                     // 设置超时，避免长时间等待（增加到15秒）
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -208,7 +193,6 @@
 
                     // 检查响应状态
                     if (!response.ok) {
-                        console.error(`【阿里云NLP】代理服务器返回错误状态码: ${response.status}`);
                         throw new Error(`代理服务器返回错误状态码: ${response.status}`);
                     }
 
@@ -217,13 +201,8 @@
                     try {
                         const responseData = JSON.parse(responseText);
 
-                        if (this.options.debug) {
-                            console.log('【阿里云NLP】请求成功，响应数据:', responseData);
-                        }
-
                         // 检查响应是否包含错误信息
                         if (responseData.Code && responseData.Code !== '200') {
-                            console.error(`【阿里云NLP】API返回错误: ${responseData.Code} - ${responseData.Message || '未知错误'}`);
                             throw new Error(`API返回错误: ${responseData.Message || responseData.Code}`);
                         }
 
@@ -235,8 +214,9 @@
 
                         return responseData;
                     } catch (parseError) {
-                        console.error('【阿里云NLP】解析响应数据失败:', parseError);
-                        console.error('【阿里云NLP】原始响应数据:', responseText);
+                        if (this.options.debug) {
+                            console.error('【阿里云NLP】解析响应数据失败:', parseError);
+                        }
                         throw parseError;
                     }
                 } catch (proxyError) {
@@ -245,19 +225,17 @@
 
                     // 如果是超时或网络错误，不打印详细错误日志
                     if (proxyError.name === 'AbortError') {
-                        console.warn('【阿里云NLP】代理服务器请求超时');
                         throw new Error('代理服务器请求超时');
                     } else if (proxyError.message && proxyError.message.includes('Failed to fetch')) {
-                        console.warn('【阿里云NLP】代理服务器连接失败');
-                        console.log('【阿里云NLP】提示: 请尝试使用其他端口启动代理服务器，例如: node proxy-server-sdk.js 3457');
                         throw new Error('代理服务器连接失败');
                     } else {
-                        console.warn('【阿里云NLP】代理服务器请求失败:', proxyError.name || proxyError.message);
                         throw proxyError;
                     }
                 }
             } catch (error) {
-                console.warn('【阿里云NLP】请求处理出错:', error.message);
+                if (this.options.debug) {
+                    console.warn('【阿里云NLP】请求处理出错:', error.message);
+                }
                 throw error;
             }
         }
@@ -461,10 +439,11 @@
          * @throws {Error} 如果分析失败，抛出错误
          */
         async analyzePos(text) {
-            console.log('【阿里云NLP】开始分析文本:', text);
+            if (this.options.debug) {
+                console.log('【阿里云NLP】开始分析文本:', text);
+            }
 
             if (!text) {
-                console.log('【阿里云NLP】文本为空，返回空结果');
                 return [];
             }
 
@@ -474,38 +453,23 @@
             // 检查文本是否包含英文
             const hasEnglish = /[a-zA-Z]/.test(text);
 
-            console.log(`【阿里云NLP】文本语言检测: 包含中文=${hasChinese}, 包含英文=${hasEnglish}`);
-
             // 如果既不包含中文也不包含英文，返回空结果
             if (!hasChinese && !hasEnglish) {
-                console.log('【阿里云NLP】文本不包含中文或英文，返回空结果');
                 return [];
             }
 
             // 检查适配器状态
             if (!this.initialized) {
-                console.error('【阿里云NLP】适配器未初始化');
                 throw new Error('阿里云NLP适配器未初始化');
             }
 
             if (!this.options.enabled) {
-                console.error('【阿里云NLP】适配器未启用');
                 throw new Error('阿里云NLP适配器未启用');
             }
 
             if (!this.options.accessKeyId || !this.options.accessKeySecret) {
-                console.error('【阿里云NLP】缺少AccessKey');
                 throw new Error('阿里云NLP缺少AccessKey');
             }
-
-            console.log('【阿里云NLP】适配器状态:', {
-                initialized: this.initialized,
-                enabled: this.options.enabled,
-                hasAccessKeyId: !!this.options.accessKeyId,
-                hasAccessKeySecret: !!this.options.accessKeySecret,
-                proxyUrl: this.options.proxyUrl || '未设置',
-                tokenizer: this.options.tokenizer
-            });
 
             try {
                 // 根据配置和文本语言选择不同的处理方式
@@ -518,14 +482,10 @@
                     useMultiLanguage: false
                 };
 
-                console.log('【阿里云NLP】分词器配置:', tokenizerConfig);
-
                 // 处理中文文本
                 if (hasChinese) {
                     // 优先使用高级版中文分词（如果启用）
                     if (tokenizerConfig.useAdvancedChinese) {
-                        console.log('【阿里云NLP】使用高级版中文分词（累计50万次免费额度）');
-
                         try {
                             const chineseResult = await this.tokenizeChineseAdvanced(text);
                             if (chineseResult && chineseResult.length > 0) {
@@ -535,10 +495,8 @@
                                     p: item.pos || ''
                                 }));
                                 tagResult = tagResult.concat(formattedResult);
-                                console.log('【阿里云NLP】高级版中文分词结果:', formattedResult);
                             }
                         } catch (advancedError) {
-                            console.error('【阿里云NLP】高级版中文分词失败，回退到基础版:', advancedError);
                             // 回退到基础版
                             tokenizerConfig.useBasicChinese = true;
                         }
@@ -546,24 +504,21 @@
 
                     // 如果未启用高级版或高级版失败，使用基础版中文分词
                     if (tokenizerConfig.useBasicChinese && tagResult.length === 0) {
-                        console.log('【阿里云NLP】使用基础版中文分词（每天50万次免费额度）');
-
                         try {
                             const basicTagResult = await this.tagText(text);
                             if (basicTagResult && basicTagResult.length > 0) {
                                 tagResult = tagResult.concat(basicTagResult);
-                                console.log('【阿里云NLP】基础版中文分词结果:', basicTagResult);
                             }
                         } catch (basicError) {
-                            console.error('【阿里云NLP】基础版中文分词失败:', basicError);
+                            if (this.options.debug) {
+                                console.error('【阿里云NLP】基础版中文分词失败');
+                            }
                         }
                     }
                 }
 
                 // 处理英文文本（如果启用多语言分词且没有中文或中文处理失败）
                 if (hasEnglish && tokenizerConfig.useMultiLanguage && (tagResult.length === 0 || !hasChinese)) {
-                    console.log('【阿里云NLP】使用高级版多语言分词（英文）（累计50万次免费额度）');
-
                     try {
                         const englishResult = await this.tokenizeMultiLanguage(text, 'en');
                         if (englishResult && englishResult.length > 0) {
@@ -573,10 +528,8 @@
                                 p: 'NN' // 默认为名词
                             }));
                             tagResult = tagResult.concat(formattedResult);
-                            console.log('【阿里云NLP】高级版多语言分词(英文)结果:', formattedResult);
                         }
                     } catch (englishError) {
-                        console.error('【阿里云NLP】高级版多语言分词(英文)失败:', englishError);
                         // 英文处理失败，让调用者使用本地compromise.js处理
                         if (hasEnglish && !hasChinese) {
                             throw new Error('阿里云NLP多语言分词失败，请使用本地处理');
@@ -584,20 +537,15 @@
                     }
                 } else if (hasEnglish && !hasChinese) {
                     // 如果有英文但没有启用多语言分词，让调用者使用本地compromise.js处理
-                    console.log('【阿里云NLP】未启用多语言分词，英文文本将由本地处理');
                     throw new Error('阿里云NLP未启用多语言分词，请使用本地处理');
                 }
 
                 // 如果所有方法都失败，尝试使用基础版词性标注作为最后的回退
                 if (tagResult.length === 0) {
-                    console.log('【阿里云NLP】所有配置的分词方法都失败，尝试使用基础版词性标注作为最后回退');
-
                     const basicTagResult = await this.tagText(text);
                     if (basicTagResult && basicTagResult.length > 0) {
                         tagResult = basicTagResult;
-                        console.log('【阿里云NLP】基础版词性标注结果:', basicTagResult);
                     } else {
-                        console.log('【阿里云NLP】词性标注结果为空');
                         throw new Error('阿里云NLP词性标注结果为空');
                     }
                 }
@@ -639,15 +587,17 @@
                     'default': { pos: 'other', weight: 20 }
                 };
 
-                console.log('【阿里云NLP】开始处理标注结果');
-
                 // 处理标注结果
                 const result = tagResult
                     .filter(item => item && item.w)
                     .map(item => {
                         const pos = item.p || 'x';
                         const mapping = posMapping[pos] || posMapping.default;
-                        console.log(`【阿里云NLP】词 "${item.w}" 的词性: ${pos} -> ${mapping.pos}, 权重: ${mapping.weight}`);
+
+                        // 只在调试模式下输出详细日志
+                        if (this.options.debug) {
+                            console.log(`【阿里云NLP】词 "${item.w}" 的词性: ${pos} -> ${mapping.pos}, 权重: ${mapping.weight}`);
+                        }
 
                         return {
                             word: item.w,
@@ -657,15 +607,14 @@
                     });
 
                 if (result.length === 0) {
-                    console.warn('【阿里云NLP】处理后的结果为空');
                     throw new Error('阿里云NLP处理后的结果为空');
                 }
 
-                console.log('【阿里云NLP】词性分析完成，结果:', result);
                 return result;
             } catch (error) {
-                console.error('【阿里云NLP】词性分析失败:', error);
-                console.error('【阿里云NLP】错误详情:', error.message, error.stack);
+                if (this.options.debug) {
+                    console.error('【阿里云NLP】词性分析失败:', error.message);
+                }
                 throw error; // 抛出错误，让调用者处理
             }
         }
