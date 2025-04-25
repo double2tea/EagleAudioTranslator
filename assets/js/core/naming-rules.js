@@ -6,6 +6,11 @@
  * 依赖：
  * - NamingUtils: 命名工具类，提供文本规范化和命名风格处理
  */
+// 确保NamingUtils已加载
+if (typeof NamingUtils === 'undefined') {
+    console.error('NamingUtils未定义，命名规则引擎可能无法正常工作');
+}
+
 class NamingRules {
     /**
      * 构造函数
@@ -35,13 +40,11 @@ class NamingRules {
             sourceID: 'UCS'
         };
 
-        // 分类ID映射表
-        this.categoryIDMap = {
-        };
+        // 分类ID映射表 - 用于自定义分类ID映射
+        this.categoryIDMap = {};
 
-        // 分类中文名映射表
-        this.categoryChineseMap = {
-        };
+        // 分类中文名映射表 - 用于自定义分类中文名映射
+        this.categoryChineseMap = {};
     }
 
     /**
@@ -323,21 +326,11 @@ class NamingRules {
     _getCategoryID(category) {
         // 特殊处理TOON分类
         if (category === 'TOON') {
-            // 对于POP子分类，返回TOONPop
             return 'TOONPop';
         }
 
-        // 处理常见分类
-        const categoryMap = {
-        };
-
-        // 先检查映射表
-        if (categoryMap[category]) {
-            return categoryMap[category];
-        }
-
-        // 然后检查自定义映射表
-        if (this.categoryIDMap[category]) {
+        // 检查自定义映射表
+        if (this.categoryIDMap && this.categoryIDMap[category]) {
             return this.categoryIDMap[category];
         }
 
@@ -352,17 +345,8 @@ class NamingRules {
      * @private
      */
     _getCategoryChineseName(category) {
-        // 处理常见分类
-        const categoryChineseMap = {
-        };
-
-        // 先检查映射表
-        if (categoryChineseMap[category]) {
-            return categoryChineseMap[category];
-        }
-
-        // 然后检查自定义映射表
-        if (this.categoryChineseMap[category]) {
+        // 检查自定义映射表
+        if (this.categoryChineseMap && this.categoryChineseMap[category]) {
             return this.categoryChineseMap[category];
         }
 

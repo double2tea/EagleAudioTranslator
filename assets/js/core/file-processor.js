@@ -212,19 +212,36 @@ class FileProcessor {
         return parts.length > 1 ? parts.pop() : '';
     }
 
-    /**
-     * 获取不带扩展名的文件名
-     * @param {string} filename - 文件名
-     * @returns {string} 不带扩展名的文件名
-     * @private
-     */
-    _getNameWithoutExtension(filename) {
-        if (!filename) return '';
-        const lastDotIndex = filename.lastIndexOf('.');
-        return lastDotIndex === -1 ? filename : filename.substring(0, lastDotIndex);
-    }
+    // 注意：_getNameWithoutExtension 方法已被移除，使用 NamingUtils.getNameWithoutExtension 替代
 
     // 注意：_isChineseFilename 方法已被移除，使用 NamingUtils.isChineseText 替代
+
+    /**
+     * 构建命名选项对象
+     * @param {boolean} [useTranslationSettings=false] - 是否使用翻译服务的设置
+     * @returns {Object} 命名选项对象
+     * @private
+     */
+    _buildNamingOptions(useTranslationSettings = false) {
+        const options = {
+            useUCS: this.namingRules && this.namingRules.settings && this.namingRules.settings.useUCS,
+            keepSpaces: false
+        };
+
+        // 根据参数决定使用哪个来源的命名风格设置
+        if (useTranslationSettings && this.translationService && this.translationService.settings) {
+            options.namingStyle = this.translationService.settings.namingStyle;
+            options.customSeparator = this.translationService.settings.customSeparator;
+        } else if (this.namingRules && this.namingRules.settings) {
+            options.namingStyle = this.namingRules.settings.namingStyle;
+            options.customSeparator = this.namingRules.settings.customSeparator;
+        } else {
+            options.namingStyle = 'none';
+            options.customSeparator = '_';
+        }
+
+        return options;
+    }
 
     /**
      * 处理文件名，提取序号和准备翻译
@@ -234,12 +251,7 @@ class FileProcessor {
      */
     async _processFileName(file) {
         // 使用NamingUtils处理文件名
-        const options = {
-            useUCS: this.namingRules && this.namingRules.settings && this.namingRules.settings.useUCS,
-            namingStyle: this.namingRules && this.namingRules.settings && this.namingRules.settings.namingStyle,
-            customSeparator: this.namingRules && this.namingRules.settings && this.namingRules.settings.customSeparator,
-            keepSpaces: false
-        };
+        const options = this._buildNamingOptions();
 
         // 处理基本命名属性
         const processedFile = NamingUtils.processFileName(file, options);
@@ -317,12 +329,7 @@ class FileProcessor {
                 let standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
 
                 // 应用命名风格和规范化
-                const options = {
-                    useUCS: this.namingRules && this.namingRules.settings && this.namingRules.settings.useUCS,
-                    namingStyle: this.translationService.settings.namingStyle,
-                    customSeparator: this.translationService.settings.customSeparator,
-                    keepSpaces: false
-                };
+                const options = this._buildNamingOptions(true);
 
                 standardizedName = NamingUtils.applyNamingStyle(
                     standardizedName,
@@ -356,10 +363,7 @@ class FileProcessor {
             // 处理翻译结果
             if (file.translatedName) {
                 // 规范化中文文本
-                const options = {
-                    useUCS: this.namingRules && this.namingRules.settings && this.namingRules.settings.useUCS,
-                    keepSpaces: false
-                };
+                const options = this._buildNamingOptions();
 
                 file.translatedName = NamingUtils.normalizeChineseText(file.translatedName, options.keepSpaces);
 
