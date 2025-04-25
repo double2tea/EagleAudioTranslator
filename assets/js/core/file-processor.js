@@ -155,10 +155,10 @@ class FileProcessor {
         try {
             // 转换为内部文件格式
             const files = items.map(item => {
-                const extension = item.ext || this._getExtensionFromName(item.name) || '';
+                const extension = item.ext || NamingUtils.getExtension(item.name) || '';
                 return {
                     id: item.id,
-                    name: this._getNameWithoutExtension(item.name),
+                    name: NamingUtils.getNameWithoutExtension(item.name),
                     originalName: item.name, // 保存原始文件名，便于调试
                     path: item.path || '',
                     extension: extension.toLowerCase(),
@@ -200,17 +200,7 @@ class FileProcessor {
         }
     }
 
-    /**
-     * 从文件名获取扩展名
-     * @param {string} filename - 文件名
-     * @returns {string} 扩展名
-     * @private
-     */
-    _getExtensionFromName(filename) {
-        if (!filename) return '';
-        const parts = filename.split('.');
-        return parts.length > 1 ? parts.pop() : '';
-    }
+    // 注意：_getExtensionFromName 方法已被移除，使用 NamingUtils.getExtension 替代
 
     // 注意：_getNameWithoutExtension 方法已被移除，使用 NamingUtils.getNameWithoutExtension 替代
 
