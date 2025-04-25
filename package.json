@@ -1,5 +1,19 @@
 {
+  "name": "eagle-audio-translator",
+  "version": "1.0.0",
+  "description": "Eagle音效文件名翻译重命名插件",
+  "main": "index.js",
+  "scripts": {
+    "start-proxy": "node proxy-server-sdk.js",
+    "start-proxy-3457": "node proxy-server-sdk.js 3457",
+    "start-proxy-3458": "node proxy-server-sdk.js 3458",
+    "start-proxy-3459": "node proxy-server-sdk.js 3459",
+    "start-proxy-legacy": "node proxy-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "nodejieba": "^3.4.4"
+    "@alicloud/pop-core": "^1.7.12"
   }
 }

@@ -10,7 +10,7 @@
   "license": "MIT",
   "logo": "./assets/icon.png",
   "keywords": ["translator", "rename", "batch", "sound", "audio"],
-  "devTools": false,
+  "devTools": true,
   "permissions": [
     "eagleAPI",
     "file",

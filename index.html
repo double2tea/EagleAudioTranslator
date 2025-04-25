@@ -4,440 +4,383 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>音效文件名翻译重命名 | Eagle插件</title>
-
-    <!-- Tailwind CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-
-    <!-- 自定义样式 -->
     <link rel="stylesheet" href="./assets/css/main.css">
-
-    <!-- Font Awesome 图标 -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- Vue 3 -->
-    <script src="https://unpkg.com/vue@3.3.4/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 
     <!-- NLP库 (本地文件) -->
     <script src="./assets/js/libs/compromise.js"></script>
     <!-- 中文分词和词性分析库 -->
     <script src="https://cdn.jsdelivr.net/npm/segmentit@2.0.3/dist/umd/segmentit.min.js"></script>
     <script src="./assets/js/libs/segmentit-direct.js"></script>
+    <!-- Intl.Segmenter适配器 -->
+    <script src="./assets/js/libs/intl-segmenter-adapter.js"></script>
+    <!-- 阿里云NLP服务适配器 -->
+    <script src="./assets/js/libs/aliyun-nlp-adapter-temp.js"></script>
+    <!-- 代理服务器管理器 -->
+    <script src="./assets/js/core/proxy-manager.js"></script>
 </head>
 <body>
     <!-- 插件加载状态提示 -->
-    <div id="loadingIndicator" style="position: fixed; inset: 0; background-color: rgba(255, 255, 255, 0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;">
-        <div style="width: 48px; height: 48px; border: 4px solid #6200ee; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite;"></div>
-        <p style="margin-top: 1rem; font-size: 1.125rem; font-weight: 500;">正在加载插件...</p>
-        <p id="loadingStatus" style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"></p>
-        <div id="loadingError" style="display: none; margin-top: 1.5rem; padding: 1rem; background-color: rgba(220, 38, 38, 0.1); color: #dc2626; border-radius: 0.5rem; max-width: 24rem; text-align: center;">
-            <p style="font-weight: 700; margin-bottom: 0.5rem;">插件加载失败</p>
-            <p id="errorMessage" style="margin-bottom: 0.75rem;">请刷新页面或重启 Eagle 后重试。</p>
-            <button onclick="location.reload()" style="padding: 0.375rem 0.75rem; background-color: #dc2626; color: white; border: none; border-radius: 0.25rem; font-size: 0.875rem; cursor: pointer;">刷新页面</button>
+    <div id="loadingIndicator" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.9);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:9999;">
+        <div style="width:50px;height:50px;border:5px solid #f3f3f3;border-top:5px solid #3498db;border-radius:50%;animation:spin 1s linear infinite;"></div>
+        <p style="margin-top:20px;font-size:16px;">正在加载插件...</p>
+        <p id="loadingStatus" style="margin-top:10px;font-size:14px;color:#666;"></p>
+        <div id="loadingError" style="display:none;margin-top:20px;padding:15px;background:#f8d7da;color:#721c24;border-radius:4px;max-width:80%;text-align:center;">
+            <p style="margin:0 0 10px 0;font-weight:bold;">插件加载失败</p>
+            <p id="errorMessage" style="margin:0 0 10px 0;">请刷新页面或重启 Eagle 后重试。</p>
+            <button onclick="location.reload()" style="padding:5px 15px;background:#dc3545;color:white;border:none;border-radius:4px;cursor:pointer;">刷新页面</button>
         </div>
     </div>
 
     <style>
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 状态样式 */
+        .status-available {
+            color: #28a745;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: rgba(40, 167, 69, 0.1);
+            display: inline-block;
+            margin: 5px 0;
+        }
+
+        .status-disabled {
+            color: #6c757d;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: rgba(108, 117, 125, 0.1);
+            display: inline-block;
+            margin: 5px 0;
+        }
+
+        .status-error {
+            color: #dc3545;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: rgba(220, 53, 69, 0.1);
+            display: inline-block;
+            margin: 5px 0;
+        }
+
+        .status-pending {
+            color: #ffc107;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: rgba(255, 193, 7, 0.1);
+            display: inline-block;
+            margin: 5px 0;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        /* 验证结果样式 */
+        .validation-success {
+            color: #28a745;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: rgba(40, 167, 69, 0.1);
+            display: inline-block;
+        }
+
+        .validation-error {
+            color: #dc3545;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: rgba(220, 53, 69, 0.1);
+            display: inline-block;
+        }
+
+        .validation-pending {
+            color: #ffc107;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: rgba(255, 193, 7, 0.1);
+            display: inline-block;
+            animation: pulse 1.5s infinite;
         }
     </style>
 
-    <div id="app" style="display:none;" class="app-container">
-        <!-- 左侧边栏 -->
-        <aside class="sidebar">
-            <div class="sidebar-logo">
-                <i class="fas fa-music"></i>
-                <span>音效文件名<br>翻译重命名</span>
-            </div>
+    <div id="app" style="display:none;">
+        <header class="app-header">
+            <h1><i class="fas fa-language"></i> 音效文件名翻译重命名</h1>
+            <p class="app-subtitle">智能翻译并格式化音效文件名称</p>
+            <div id="plugin-info" class="plugin-info"></div>
+            <button id="themeToggle" class="theme-toggle">
+                <i class="fas fa-moon"></i>
+            </button>
+        </header>
 
-            <div class="sidebar-info">
-                <div class="sidebar-info-item">
-                    <i class="fas fa-fingerprint"></i>
-                    <span>插件ID: 432c3930-499f-4013-ad33-7f880a5ed0dd</span>
-                </div>
-                <div class="sidebar-info-item">
-                    <i class="fas fa-code-branch"></i>
-                    <span>版本: 1.0.0</span>
-                </div>
-            </div>
-
-            <div style="margin-top: auto; text-align: center;">
-                <button id="themeToggle" style="background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer;">
-                    <i class="fas fa-moon"></i>
-                </button>
-            </div>
-        </aside>
-
-        <!-- 主内容区域 -->
-        <main class="main-content">
-            <!-- 步骤指示器 -->
-            <div class="steps-container">
-                <div class="step active" data-step="1">
+        <main class="app-content">
+            <!-- 工作流程指引 -->
+            <section class="workflow-guide">
+                <div class="workflow-step active">
                     <div class="step-number">1</div>
                     <div class="step-label">选择文件</div>
                 </div>
-                <div class="step-divider"></div>
-                <div class="step" data-step="2">
+                <div class="workflow-divider"></div>
+                <div class="workflow-step">
                     <div class="step-number">2</div>
                     <div class="step-label">设置翻译</div>
                 </div>
-                <div class="step-divider"></div>
-                <div class="step" data-step="3">
+                <div class="workflow-divider"></div>
+                <div class="workflow-step">
                     <div class="step-number">3</div>
                     <div class="step-label">命名规则</div>
                 </div>
-                <div class="step-divider"></div>
-                <div class="step" data-step="4">
+                <div class="workflow-divider"></div>
+                <div class="workflow-step">
                     <div class="step-number">4</div>
                     <div class="step-label">预览结果</div>
                 </div>
-            </div>
+            </section>
 
             <!-- 主要内容容器 -->
-            <div class="space-y-6">
+            <div class="main-container">
                 <!-- 文件选择区域 -->
-                <section id="fileSelector" class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">
-                            <i class="fas fa-file-audio"></i> 选择音效文件
-                        </h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="flex flex-wrap gap-4 mb-6">
-                            <button id="selectFromCurrent" class="btn btn-primary">
-                                <i class="fas fa-mouse-pointer"></i> 当前选中
-                            </button>
-                            <button id="selectFromFolder" class="btn btn-primary">
-                                <i class="fas fa-folder-open"></i> 从文件夹
-                            </button>
-                            <button id="selectFromTag" class="btn btn-primary">
-                                <i class="fas fa-tags"></i> 从标签
-                            </button>
-                        </div>
+                <section id="fileSelector" class="section">
+                    <h2><i class="fas fa-file-audio"></i> 选择音效文件</h2>
 
-                        <div style="background-color: #e3f2fd; color: #0d47a1; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                            已选择 <span id="selectedCount" style="font-weight: bold;">0</span> 个文件
-                        </div>
-
-                        <div id="selectedFilesList" style="max-height: 15rem; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;"></div>
+                    <div class="file-selection-methods">
+                        <button id="selectFromCurrent" class="btn">
+                            <i class="fas fa-mouse-pointer"></i> 当前选中
+                        </button>
+                        <button id="selectFromFolder" class="btn">
+                            <i class="fas fa-folder-open"></i> 从文件夹
+                        </button>
+                        <button id="selectFromTag" class="btn">
+                            <i class="fas fa-tags"></i> 从标签
+                        </button>
                     </div>
+
+                    <div class="selected-files-info">
+                        已选择 <span id="selectedCount">0</span> 个文件
+                    </div>
+
+                    <div id="selectedFilesList" class="selected-files-list"></div>
                 </section>
 
                 <!-- 翻译设置区域 -->
-                <section id="translationSettings" class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">
-                            <i class="fas fa-cog"></i> 翻译设置
-                        </h2>
-                    </div>
-                    <div class="card-body">
-                        <div style="display: flex; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
-                            <a class="tab-btn active" data-tab="translationTab" style="padding: 0.75rem 1.5rem; cursor: pointer; position: relative; font-weight: 500;">翻译设置</a>
-                            <a class="tab-btn" data-tab="aiTab" style="padding: 0.75rem 1.5rem; cursor: pointer; position: relative; font-weight: 500;">AI模型设置</a>
-                        </div>
+                <section id="translationSettings" class="section">
+                    <h2><i class="fas fa-cog"></i> 翻译设置</h2>
 
-                        <style>
-                            .tab-btn.active {
-                                color: var(--primary-color);
-                                border-bottom: 2px solid var(--primary-color);
-                            }
-                            .tab-btn {
-                                color: var(--text-secondary);
-                            }
-                        </style>
+                    <ul class="nav nav-tabs">
+                        <li class="active"><a href="#translationTab" data-toggle="tab">翻译设置</a></li>
+                        <li><a href="#aiTab" data-toggle="tab">AI模型设置</a></li>
+                        <li><a href="#aliyunTab" data-toggle="tab">分词与匹配</a></li>
+                    </ul>
 
-                        <div class="tab-content">
+                    <div class="tab-content">
                         <div id="translationTab" class="tab-pane active">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-globe-americas"></i> 源语言
-                                        </span>
-                                    </label>
-                                    <select id="sourceLanguage" class="select select-bordered w-full">
+                            <div class="settings-group">
+                                <div class="setting-item">
+                                    <label for="sourceLanguage"><i class="fas fa-globe-americas"></i> 源语言：</label>
+                                    <select id="sourceLanguage" class="select-with-icon">
                                         <option value="auto">自动检测</option>
                                         <option value="en" selected>英语 (English)</option>
                                         <option value="ja">日语 (日本語)</option>
                                         <option value="ko">韩语 (한국어)</option>
                                     </select>
                                 </div>
-
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-globe-asia"></i> 目标语言
-                                        </span>
-                                    </label>
-                                    <select id="targetLanguage" class="select select-bordered w-full">
+                                <div class="setting-item">
+                                    <label for="targetLanguage"><i class="fas fa-globe-asia"></i> 目标语言：</label>
+                                    <select id="targetLanguage" class="select-with-icon">
                                         <option value="zh-CN" selected>中文(简体)</option>
                                         <option value="zh-TW">中文(繁体)</option>
                                         <option value="en">英语 (English)</option>
                                     </select>
                                 </div>
-                            </div>
-
-                            <div class="divider"></div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div class="form-control">
-                                    <div class="toggle-container">
-                                        <label class="toggle">
-                                            <input type="checkbox" id="standardizeEnglish">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                        <span class="toggle-label">
-                                            <i class="fas fa-robot"></i> 对英文进行标准化处理
-                                        </span>
-                                    </div>
+                                <div class="setting-toggle">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="standardizeEnglish">
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label"><i class="fas fa-robot"></i> 对英文进行标准化处理</span>
+                                    </label>
                                 </div>
 
-                                <div id="namingStyleContainer" class="form-control" style="display:none;">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-font"></i> 命名风格
-                                        </span>
-                                    </label>
-                                    <select id="namingStyle" class="select select-bordered w-full">
-                                        <option value="none">不处理</option>
-                                        <option value="camelCase">驼峰命名 (camelCase)</option>
-                                        <option value="PascalCase">帕斯卡命名 (PascalCase)</option>
-                                        <option value="snake_case">蛇形命名 (snake_case)</option>
-                                        <option value="kebab-case">烧烤命名 (kebab-case)</option>
-                                        <option value="custom">自定义分隔符</option>
-                                    </select>
+                                <div id="namingStyleContainer" class="settings-group" style="display:none;">
+                                    <div class="setting-item">
+                                        <label for="namingStyle"><i class="fas fa-font"></i> 命名风格：</label>
+                                        <select id="namingStyle">
+                                            <option value="none">不处理</option>
+                                            <option value="camelCase">驼峰命名 (camelCase)</option>
+                                            <option value="PascalCase">帕斯卡命名 (PascalCase)</option>
+                                            <option value="snake_case">蛇形命名 (snake_case)</option>
+                                            <option value="kebab-case">烧烤命名 (kebab-case)</option>
+                                            <option value="custom">自定义分隔符</option>
+                                        </select>
+                                    </div>
 
-                                    <div id="customSeparatorContainer" class="mt-2" style="display:none;">
-                                        <label class="label">
-                                            <span class="label-text flex items-center gap-2">
-                                                <i class="fas fa-minus"></i> 自定义分隔符
-                                            </span>
-                                        </label>
-                                        <input type="text" id="customSeparator" value="_" maxlength="1" class="input input-bordered w-full">
+                                    <div id="customSeparatorContainer" class="setting-item" style="display:none;">
+                                        <label for="customSeparator"><i class="fas fa-minus"></i> 自定义分隔符：</label>
+                                        <input type="text" id="customSeparator" value="_" maxlength="1">
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="divider"></div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <div class="form-control mb-4">
-                                        <div class="toggle-container">
-                                            <label class="toggle">
-                                                <input type="checkbox" id="useCache" checked>
-                                                <span class="toggle-slider"></span>
-                                            </label>
-                                            <span class="toggle-label">
-                                                <i class="fas fa-database"></i> 启用翻译缓存
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-control mb-4">
-                                        <div class="toggle-container">
-                                            <label class="toggle">
-                                                <input type="checkbox" id="useCSV" checked>
-                                                <span class="toggle-slider"></span>
-                                            </label>
-                                            <span class="toggle-label">
-                                                <i class="fas fa-table"></i> 使用CSV术语库
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-control">
-                                        <div class="toggle-container">
-                                            <label class="toggle">
-                                                <input type="checkbox" id="useAIClassification">
-                                                <span class="toggle-slider"></span>
-                                            </label>
-                                            <span class="toggle-label">
-                                                <i class="fas fa-robot"></i> 使用AI辅助分类匹配
-                                            </span>
-                                        </div>
-                                        <div style="margin-left: 3.5rem; font-size: 0.75rem; color: var(--text-secondary);">
-                                            使用AI接口获取音效分类信息，提高匹配准确性（需要额外API请求）
-                                        </div>
+                            <div class="settings-options">
+                                <div class="setting-toggle">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="useCache" checked>
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label"><i class="fas fa-database"></i> 启用翻译缓存</span>
+                                    </label>
+                                </div>
+                                <div class="setting-toggle">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="useCSV" checked>
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label"><i class="fas fa-table"></i> 使用CSV术语库</span>
+                                    </label>
+                                </div>
+                                <div class="setting-toggle">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="useAIClassification">
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label"><i class="fas fa-robot"></i> 使用AI辅助分类匹配</span>
+                                    </label>
+                                    <div class="setting-description">
+                                        <small>使用AI接口获取音效分类信息，提高匹配准确性（需要额外API请求）</small>
                                     </div>
                                 </div>
 
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-sitemap"></i> 匹配策略
-                                        </span>
-                                    </label>
-                                    <select id="matchStrategy" class="select select-bordered w-full">
+                                <div class="setting-item">
+                                    <label for="matchStrategy"><i class="fas fa-sitemap"></i> 匹配策略：</label>
+                                    <select id="matchStrategy">
                                         <option value="auto">自动（按优先级）</option>
                                         <option value="ai">AI辅助分类（如果启用）</option>
                                         <option value="bilingual">双语匹配（中英文结合）</option>
                                         <option value="pos">基于分词系统的匹配</option>
                                         <option value="translated">翻译文本直接匹配</option>
                                     </select>
-                                    <label class="label">
-                                        <span class="label-text-alt text-gray-500">
-                                            选择匹配策略会影响分类结果的准确性，自动模式会按优先级尝试所有策略
-                                        </span>
-                                    </label>
+                                    <div class="setting-description">
+                                        <small>选择匹配策略会影响分类结果的准确性，自动模式会按优先级尝试所有策略</small>
+                                    </div>
                                 </div>
+
+
                             </div>
                         </div>
 
                         <div id="aiTab" class="tab-pane">
-                            <div class="form-control mb-6">
-                                <label class="label">
-                                    <span class="label-text flex items-center gap-2">
-                                        <i class="fas fa-server"></i> 翻译服务
-                                    </span>
-                                </label>
-                                <select id="translationProvider" class="select select-bordered w-full">
-                                    <option value="zhipu">智谱AI</option>
-                                    <option value="deepseek">Deepseek</option>
-                                    <option value="openrouter">OpenRouter AI</option>
-                                    <option value="google">Google 翻译</option>
-                                    <option value="libre">LibreTranslate</option>
-                                </select>
+                            <div class="settings-group">
+                                <div class="setting-item">
+                                    <label for="translationProvider"><i class="fas fa-server"></i> 翻译服务：</label>
+                                    <select id="translationProvider" class="select-with-icon">
+                                        <option value="zhipu">智谱AI</option>
+                                        <option value="deepseek">Deepseek</option>
+                                        <option value="openrouter">OpenRouter AI</option>
+                                        <option value="google">Google 翻译</option>
+                                        <option value="libre">LibreTranslate</option>
+                                    </select>
+                                </div>
                             </div>
 
-                            <div id="zhipuSettings" class="card bg-base-200 p-4 rounded-lg mb-6">
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-key"></i> API密钥
-                                        </span>
-                                    </label>
-                                    <div class="input-group">
-                                        <input type="text" id="zhipuKey" placeholder="输入智谱AI API密钥" class="input input-bordered w-full">
-                                        <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" class="btn btn-outline">获取密钥</a>
+                            <div id="zhipuSettings" class="api-settings">
+                                <div class="setting-item">
+                                    <label for="zhipuKey"><i class="fas fa-key"></i> API密钥：</label>
+                                    <div class="input-with-link">
+                                        <input type="text" id="zhipuKey" placeholder="输入智谱AI API密钥">
+                                        <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" class="input-link">获取密钥</a>
                                     </div>
                                 </div>
 
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-brain"></i> 模型
-                                        </span>
-                                    </label>
-                                    <select id="zhipuModel" class="select select-bordered w-full">
+                                <div class="setting-item">
+                                    <label for="zhipuModel"><i class="fas fa-brain"></i> 模型：</label>
+                                    <select id="zhipuModel">
                                         <option value="glm-4">GLM-4</option>
                                         <option value="glm-3-turbo">GLM-3-Turbo</option>
                                         <option value="chatglm_turbo">ChatGLM Turbo</option>
                                     </select>
                                 </div>
 
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-comment-alt"></i> 提示风格
-                                        </span>
-                                    </label>
-                                    <div class="flex gap-2">
-                                        <select id="customPromptID" class="select select-bordered flex-1">
-                                            <option value="">默认</option>
-                                            <option value="accurate">准确专业</option>
-                                            <option value="natural">自然流畅</option>
-                                            <option value="creative">创意生动</option>
-                                            <option value="audio">音效专用</option>
-                                            <option value="custom">自定义提示</option>
-                                        </select>
-                                        <button id="viewPromptBtn" class="btn btn-info">
-                                            <i class="fas fa-eye mr-1"></i> 查看提示词
-                                        </button>
-                                    </div>
+                                <div class="setting-item">
+                                    <label for="customPromptID"><i class="fas fa-comment-alt"></i> 提示风格：</label>
+                                    <select id="customPromptID">
+                                        <option value="">默认</option>
+                                        <option value="accurate">准确专业</option>
+                                        <option value="natural">自然流畅</option>
+                                        <option value="creative">创意生动</option>
+                                        <option value="audio">音效专用</option>
+                                        <option value="custom">自定义提示</option>
+                                    </select>
+                                    <button id="viewPromptBtn" class="btn btn-sm btn-info" style="margin-left: 10px;">
+                                        <i class="fas fa-eye"></i> 查看提示词
+                                    </button>
                                 </div>
 
-                                <div id="customPromptContainer" class="form-control" style="display:none;">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-edit"></i> 自定义提示模板
-                                        </span>
-                                    </label>
-                                    <textarea id="promptTemplate" class="textarea textarea-bordered h-24" placeholder="使用{text}表示原文本，{from}表示源语言，{to}表示目标语言"></textarea>
-                                    <label class="label">
-                                        <span class="label-text-alt text-gray-500">提示：使用{text}、{from}和{to}作为变量占位符</span>
-                                    </label>
+                                <div id="customPromptContainer" class="setting-item" style="display:none;">
+                                    <label for="promptTemplate"><i class="fas fa-edit"></i> 自定义提示模板：</label>
+                                    <textarea id="promptTemplate" rows="3" placeholder="使用{text}表示原文本，{from}表示源语言，{to}表示目标语言"></textarea>
+                                    <small class="form-text">提示：使用{text}、{from}和{to}作为变量占位符</small>
                                 </div>
                             </div>
 
-                            <div id="deepseekSettings" class="card bg-base-200 p-4 rounded-lg mb-6" style="display:none;">
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-key"></i> API密钥
-                                        </span>
-                                    </label>
-                                    <div class="input-group">
-                                        <input type="text" id="deepseekKey" placeholder="输入Deepseek API密钥" class="input input-bordered w-full">
-                                        <a href="https://platform.deepseek.com/api-keys" target="_blank" class="btn btn-outline">获取密钥</a>
+                            <div id="deepseekSettings" class="api-settings" style="display:none;">
+                                <div class="setting-item">
+                                    <label for="deepseekKey"><i class="fas fa-key"></i> API密钥：</label>
+                                    <div class="input-with-link">
+                                        <input type="text" id="deepseekKey" placeholder="输入Deepseek API密钥">
+                                        <a href="https://platform.deepseek.com/api-keys" target="_blank" class="input-link">获取密钥</a>
                                     </div>
                                 </div>
 
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-brain"></i> 模型
-                                        </span>
-                                    </label>
-                                    <select id="deepseekModel" class="select select-bordered w-full">
+                                <div class="setting-item">
+                                    <label for="deepseekModel"><i class="fas fa-brain"></i> 模型：</label>
+                                    <select id="deepseekModel">
                                         <option value="deepseek-chat">Deepseek Chat</option>
                                     </select>
                                 </div>
 
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-comment-alt"></i> 提示风格
-                                        </span>
-                                    </label>
-                                    <div class="flex gap-2">
-                                        <select id="deepseekPromptID" class="select select-bordered flex-1">
-                                            <option value="">默认</option>
-                                            <option value="accurate">准确专业</option>
-                                            <option value="natural">自然流畅</option>
-                                            <option value="creative">创意生动</option>
-                                            <option value="audio">音效专用</option>
-                                            <option value="custom">自定义提示</option>
-                                        </select>
-                                        <button id="deepseekViewPromptBtn" class="btn btn-info">
-                                            <i class="fas fa-eye mr-1"></i> 查看提示词
-                                        </button>
-                                    </div>
+                                <div class="setting-item">
+                                    <label for="customPromptID"><i class="fas fa-comment-alt"></i> 提示风格：</label>
+                                    <select id="customPromptID">
+                                        <option value="">默认</option>
+                                        <option value="accurate">准确专业</option>
+                                        <option value="natural">自然流畅</option>
+                                        <option value="creative">创意生动</option>
+                                        <option value="audio">音效专用</option>
+                                        <option value="custom">自定义提示</option>
+                                    </select>
+                                    <button id="viewPromptBtn" class="btn btn-sm btn-info" style="margin-left: 10px;">
+                                        <i class="fas fa-eye"></i> 查看提示词
+                                    </button>
                                 </div>
 
-                                <div id="deepseekCustomPromptContainer" class="form-control" style="display:none;">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-edit"></i> 自定义提示模板
-                                        </span>
-                                    </label>
-                                    <textarea id="deepseekPromptTemplate" class="textarea textarea-bordered h-24" placeholder="使用{text}表示原文本，{from}表示源语言，{to}表示目标语言"></textarea>
-                                    <label class="label">
-                                        <span class="label-text-alt text-gray-500">提示：使用{text}、{from}和{to}作为变量占位符</span>
-                                    </label>
+                                <div id="customPromptContainer" class="setting-item" style="display:none;">
+                                    <label for="promptTemplate"><i class="fas fa-edit"></i> 自定义提示模板：</label>
+                                    <textarea id="promptTemplate" rows="3" placeholder="使用{text}表示原文本，{from}表示源语言，{to}表示目标语言"></textarea>
+                                    <small class="form-text">提示：使用{text}、{from}和{to}作为变量占位符</small>
                                 </div>
                             </div>
 
-                            <div id="openrouterSettings" class="card bg-base-200 p-4 rounded-lg mb-6" style="display:none;">
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-key"></i> API密钥
-                                        </span>
-                                    </label>
-                                    <div class="input-group">
-                                        <input type="text" id="openrouterKey" placeholder="sk-or-v1-..." class="input input-bordered w-full">
-                                        <a href="https://openrouter.ai/keys" target="_blank" class="btn btn-outline">获取密钥</a>
+                            <div id="openrouterSettings" class="api-settings" style="display:none;">
+                                <div class="setting-item">
+                                    <label for="openrouterKey"><i class="fas fa-key"></i> API密钥：</label>
+                                    <div class="input-with-link">
+                                        <input type="text" id="openrouterKey" placeholder="sk-or-v1-...">
+                                        <a href="https://openrouter.ai/keys" target="_blank" class="input-link">获取密钥</a>
                                     </div>
                                 </div>
 
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-brain"></i> AI模型
-                                        </span>
-                                    </label>
-                                    <select id="aiModel" class="select select-bordered w-full">
+                                <div class="setting-item">
+                                    <label for="aiModel"><i class="fas fa-brain"></i> AI模型：</label>
+                                    <select id="aiModel">
                                         <option value="deepseek-chat-v3">Deepseek Chat V3 (免费)</option>
                                         <option value="gemini-flash">Gemini 2.0 Flash (免费)</option>
                                         <option value="qwen-32b">Qwen 32B (免费)</option>
@@ -445,73 +388,215 @@
                                     </select>
                                 </div>
 
-                                <div id="customModelContainer" class="form-control mb-4" style="display:none;">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-code"></i> 自定义模型ID
-                                        </span>
-                                    </label>
-                                    <input type="text" id="customModelId" placeholder="例如: anthropic/claude-3-opus" class="input input-bordered w-full">
+                                <div id="customModelContainer" class="setting-item" style="display:none;">
+                                    <label for="customModelId"><i class="fas fa-code"></i> 自定义模型ID：</label>
+                                    <input type="text" id="customModelId" placeholder="例如: anthropic/claude-3-opus">
                                 </div>
 
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-comment-alt"></i> 提示风格
-                                        </span>
+                                <div class="setting-item">
+                                    <label for="customPromptID"><i class="fas fa-comment-alt"></i> 提示风格：</label>
+                                    <select id="customPromptID">
+                                        <option value="">默认</option>
+                                        <option value="accurate">准确专业</option>
+                                        <option value="natural">自然流畅</option>
+                                        <option value="creative">创意生动</option>
+                                        <option value="audio">音效专用</option>
+                                        <option value="custom">自定义提示</option>
+                                    </select>
+                                    <button id="viewPromptBtn" class="btn btn-sm btn-info" style="margin-left: 10px;">
+                                        <i class="fas fa-eye"></i> 查看提示词
+                                    </button>
+                                </div>
+
+                                <div id="customPromptContainer" class="setting-item" style="display:none;">
+                                    <label for="promptTemplate"><i class="fas fa-edit"></i> 自定义提示模板：</label>
+                                    <textarea id="promptTemplate" rows="3" placeholder="使用{text}表示原文本，{from}表示源语言，{to}表示目标语言"></textarea>
+                                    <small class="form-text">提示：使用{text}、{from}和{to}作为变量占位符</small>
+                                </div>
+                            </div>
+
+                            <div id="googleSettings" class="api-settings" style="display:none;">
+                                <p class="settings-note">使用Google翻译无需额外设置。</p>
+                            </div>
+
+                            <div id="libreSettings" class="api-settings" style="display:none;">
+                                <div class="setting-item">
+                                    <label for="libreEndpoint"><i class="fas fa-link"></i> 端点URL：</label>
+                                    <input type="text" id="libreEndpoint" placeholder="https://libretranslate.com/" value="https://libretranslate.com/">
+                                </div>
+                                <div class="setting-item">
+                                    <label for="libreKey"><i class="fas fa-key"></i> API密钥（可选）：</label>
+                                    <input type="text" id="libreKey" placeholder="可选的API密钥">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 阿里云NLP服务设置 -->
+                        <div id="aliyunTab" class="tab-pane">
+                            <div class="settings-group">
+                                <div class="setting-toggle">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="enableAliyunNLP">
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label"><i class="fas fa-cloud"></i> 启用在线分词服务</span>
                                     </label>
-                                    <div class="flex gap-2">
-                                        <select id="openrouterPromptID" class="select select-bordered flex-1">
-                                            <option value="">默认</option>
-                                            <option value="accurate">准确专业</option>
-                                            <option value="natural">自然流畅</option>
-                                            <option value="creative">创意生动</option>
-                                            <option value="audio">音效专用</option>
-                                            <option value="custom">自定义提示</option>
-                                        </select>
-                                        <button id="openrouterViewPromptBtn" class="btn btn-info">
-                                            <i class="fas fa-eye mr-1"></i> 查看提示词
-                                        </button>
+                                    <div class="setting-description">
+                                        <small>使用阿里云NLP服务提高分词和分类匹配准确性（需要阿里云账号和API密钥），禁用时将使用本地分词</small>
                                     </div>
                                 </div>
 
-                                <div id="openrouterCustomPromptContainer" class="form-control" style="display:none;">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-edit"></i> 自定义提示模板
-                                        </span>
-                                    </label>
-                                    <textarea id="openrouterPromptTemplate" class="textarea textarea-bordered h-24" placeholder="使用{text}表示原文本，{from}表示源语言，{to}表示目标语言"></textarea>
-                                    <label class="label">
-                                        <span class="label-text-alt text-gray-500">提示：使用{text}、{from}和{to}作为变量占位符</span>
-                                    </label>
-                                </div>
-                            </div>
+                                <div id="aliyunNLPSettings" class="api-settings" style="display:none;">
+                                    <div class="setting-item">
+                                        <label for="aliyunAccessKeyId"><i class="fas fa-key"></i> AccessKey ID：</label>
+                                        <div class="input-with-link">
+                                            <input type="text" id="aliyunAccessKeyId" placeholder="输入阿里云AccessKey ID">
+                                            <a href="https://ram.console.aliyun.com/manage/ak" target="_blank" class="input-link">获取密钥</a>
+                                        </div>
+                                    </div>
 
-                            <div id="googleSettings" class="card bg-base-200 p-4 rounded-lg mb-6" style="display:none;">
-                                <div class="alert alert-info">
-                                    <i class="fas fa-info-circle mr-2"></i>
-                                    使用Google翻译无需额外设置。
-                                </div>
-                            </div>
+                                    <div class="setting-item">
+                                        <label for="aliyunAccessKeySecret"><i class="fas fa-key"></i> AccessKey Secret：</label>
+                                        <input type="password" id="aliyunAccessKeySecret" placeholder="输入阿里云AccessKey Secret">
+                                    </div>
 
-                            <div id="libreSettings" class="card bg-base-200 p-4 rounded-lg mb-6" style="display:none;">
-                                <div class="form-control mb-4">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-link"></i> 端点URL
-                                        </span>
-                                    </label>
-                                    <input type="text" id="libreEndpoint" placeholder="https://libretranslate.com/" value="https://libretranslate.com/" class="input input-bordered w-full">
-                                </div>
+                                    <div class="setting-item">
+                                        <button id="validateAliyunKeyBtn" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-check-circle"></i> 验证AccessKey
+                                        </button>
+                                        <span id="aliyunKeyValidationResult" style="margin-left: 10px; display: none;"></span>
+                                    </div>
 
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text flex items-center gap-2">
-                                            <i class="fas fa-key"></i> API密钥（可选）
-                                        </span>
-                                    </label>
-                                    <input type="text" id="libreKey" placeholder="可选的API密钥" class="input input-bordered w-full">
+                                    <div class="setting-toggle">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="aliyunDebugMode">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-label"><i class="fas fa-bug"></i> 调试模式</span>
+                                        </label>
+                                        <div class="setting-description">
+                                            <small>开启调试模式会在控制台输出详细的请求和响应信息</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-item">
+                                        <label for="aliyunMatchStrategy"><i class="fas fa-sitemap"></i> 分词优先级：</label>
+                                        <select id="aliyunMatchStrategy">
+                                            <option value="auto">自动（优先在线服务）</option>
+                                            <option value="online">优先使用在线分词</option>
+                                            <option value="local">优先使用本地分词</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <h4><i class="fas fa-language"></i> 分词方法设置</h4>
+                                        <div class="setting-description">
+                                            <small>选择阿里云NLP服务使用的分词方法，不同方法有不同的免费额度限制</small>
+                                        </div>
+
+                                        <div class="setting-toggle">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="useBasicChinese" checked>
+                                                <span class="toggle-slider"></span>
+                                                <span class="toggle-label"><i class="fas fa-font"></i> 基础版中文分词</span>
+                                            </label>
+                                            <div class="setting-description">
+                                                <small>每天50万次免费额度，适用于一般中文文本</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-toggle">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="useAdvancedChinese">
+                                                <span class="toggle-slider"></span>
+                                                <span class="toggle-label"><i class="fas fa-font"></i> 高级版中文分词</span>
+                                            </label>
+                                            <div class="setting-description">
+                                                <small>累计50万次免费额度，提供更精确的中文分词和词性标注</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-toggle">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="useMultiLanguage">
+                                                <span class="toggle-slider"></span>
+                                                <span class="toggle-label"><i class="fas fa-language"></i> 高级版多语言分词</span>
+                                            </label>
+                                            <div class="setting-description">
+                                                <small>累计50万次免费额度，支持英语等多种语言的分词</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <h4><i class="fas fa-filter"></i> 词性过滤设置</h4>
+                                        <div class="setting-description">
+                                            <small>设置词性分析结果的过滤规则，可以提高匹配准确性</small>
+                                        </div>
+
+                                        <div class="setting-toggle">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="enablePosFilter" checked>
+                                                <span class="toggle-slider"></span>
+                                                <span class="toggle-label"><i class="fas fa-filter"></i> 启用词性过滤</span>
+                                            </label>
+                                            <div class="setting-description">
+                                                <small>过滤低权重的标点符号、数字和功能词，提高匹配准确性</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-toggle">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="filterPunctuation" checked>
+                                                <span class="toggle-slider"></span>
+                                                <span class="toggle-label"><i class="fas fa-minus"></i> 过滤标点符号</span>
+                                            </label>
+                                            <div class="setting-description">
+                                                <small>过滤下划线、连字符等标点符号，减少干扰</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-toggle">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="filterNumbers" checked>
+                                                <span class="toggle-slider"></span>
+                                                <span class="toggle-label"><i class="fas fa-sort-numeric-down"></i> 过滤单独数字</span>
+                                            </label>
+                                            <div class="setting-description">
+                                                <small>过滤单独的数字，如"1"、"2"等，保留与文字组合的数字</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-toggle">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="filterFunctionWords" checked>
+                                                <span class="toggle-slider"></span>
+                                                <span class="toggle-label"><i class="fas fa-font"></i> 过滤功能词</span>
+                                            </label>
+                                            <div class="setting-description">
+                                                <small>过滤"的"、"了"、"the"、"of"等功能词，提高匹配精度</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="aliyun-status">
+                                        <h4><i class="fas fa-info-circle"></i> 服务状态</h4>
+                                        <div id="aliyunServiceStatus">未启用</div>
+                                        <div id="aliyunRequestStats" style="display:none;">
+                                            <p>今日请求次数: <span id="aliyunRequestCount">0</span> / <span id="aliyunMaxRequests">50000</span></p>
+                                            <p>剩余请求次数: <span id="aliyunRemainingRequests">50000</span></p>
+                                        </div>
+                                        <h4><i class="fas fa-server"></i> 代理服务器状态</h4>
+                                        <div id="proxyServerStatus">未启动</div>
+                                        <button id="startProxyBtn" class="btn btn-sm btn-info" style="margin-top: 5px;">
+                                            <i class="fas fa-play"></i> 检查代理服务器
+                                        </button>
+                                        <div class="setting-description" style="margin-top: 5px;">
+                                            <small>注意：需要手动启动代理服务器。请打开命令行终端，导航到插件目录，然后运行命令: <code>node proxy-server.js</code></small>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-description">
+                                        <p><strong>注意：</strong> 阿里云NLP服务为付费服务，基础版每天有50万次的免费额度。本插件默认限制每天最多使用50000次请求，以避免超出免费额度。</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -519,146 +604,90 @@
                 </section>
 
                 <!-- 命名规则设置 -->
-                <section id="namingRules" class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">
-                            <i class="fas fa-font"></i> 命名规则设置
-                        </h2>
+                <section id="namingRules" class="section">
+                    <h2><i class="fas fa-font"></i> 命名规则设置</h2>
+
+                    <div class="setting-toggle">
+                        <label class="toggle">
+                            <input type="checkbox" id="useUCSNaming" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label"><i class="fas fa-sitemap"></i> 使用UCS回路式命名规则</span>
+                        </label>
                     </div>
-                    <div class="card-body">
-                        <div class="form-control mb-6">
-                            <div class="toggle-container">
-                                <label class="toggle">
-                                    <input type="checkbox" id="useUCSNaming" checked>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                                <span class="toggle-label">
-                                    <i class="fas fa-sitemap"></i> 使用UCS回路式命名规则
-                                </span>
-                            </div>
-                        </div>
 
                     <!-- UCS命名规则设置 -->
-                    <div id="ucsNamingOptions" style="background-color: #f5f7fa; padding: 1.5rem; border-radius: 0.5rem; border: 1px solid #e0e6ed;">
-                        <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">命名元素选择</h3>
-                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">选择要包含的命名元素和排列顺序</p>
+                    <div id="ucsNamingOptions" class="settings-section">
+                        <h3>命名元素选择</h3>
+                        <p class="description">选择要包含的命名元素和排列顺序</p>
 
-                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                            <div style="background-color: white; border-radius: 0.5rem; box-shadow: var(--custom-shadow); overflow: hidden;">
-                                <div style="padding: 1rem;">
-                                    <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--primary-color);">分类信息</h4>
-
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="catID" checked style="margin-right: 0.5rem;">
-                                            <span>分类ID (CatID)</span>
-                                        </label>
-                                    </div>
-
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="category" style="margin-right: 0.5rem;">
-                                            <span>分类名称 (Category)</span>
-                                        </label>
-                                    </div>
-
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="category_zh" checked style="margin-right: 0.5rem;">
-                                            <span>分类中文名 (Category_zh)</span>
-                                        </label>
-                                    </div>
-
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="subCategory" style="margin-right: 0.5rem;">
-                                            <span>子分类 (SubCategory)</span>
-                                        </label>
-                                    </div>
-
-                                    <div>
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="subCategory_zh" style="margin-right: 0.5rem;">
-                                            <span>子分类中文名 (SubCategory_zh)</span>
-                                        </label>
-                                    </div>
+                        <div class="settings-columns">
+                            <div class="settings-column">
+                                <h4>分类信息</h4>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="catID" checked>
+                                    <label for="catID">分类ID (CatID)</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="category">
+                                    <label for="category">分类名称 (Category)</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="category_zh" checked>
+                                    <label for="category_zh">分类中文名 (Category_zh)</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="subCategory">
+                                    <label for="subCategory">子分类 (SubCategory)</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="subCategory_zh">
+                                    <label for="subCategory_zh">子分类中文名 (SubCategory_zh)</label>
                                 </div>
                             </div>
 
-                            <div style="background-color: white; border-radius: 0.5rem; box-shadow: var(--custom-shadow); overflow: hidden;">
-                                <div style="padding: 1rem;">
-                                    <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--primary-color);">描述信息</h4>
-
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="fxName" checked style="margin-right: 0.5rem;">
-                                            <span>英文描述 (FXName)</span>
-                                        </label>
-                                    </div>
-
-                                    <div>
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="fxName_zh" checked style="margin-right: 0.5rem;">
-                                            <span>中文描述 (FXName_zh)</span>
-                                        </label>
-                                    </div>
+                            <div class="settings-column">
+                                <h4>描述信息</h4>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="fxName" checked>
+                                    <label for="fxName">英文描述 (FXName)</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="fxName_zh" checked>
+                                    <label for="fxName_zh">中文描述 (FXName_zh)</label>
                                 </div>
                             </div>
 
-                            <div style="background-color: white; border-radius: 0.5rem; box-shadow: var(--custom-shadow); overflow: hidden;">
-                                <div style="padding: 1rem;">
-                                    <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--primary-color);">元数据</h4>
-
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="creatorID" style="margin-right: 0.5rem;">
-                                            <span>制作者ID (CreatorID)</span>
-                                        </label>
-                                    </div>
-
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="sourceID" style="margin-right: 0.5rem;">
-                                            <span>项目ID (SourceID)</span>
-                                        </label>
-                                    </div>
-
-                                    <div>
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input type="checkbox" id="serialNumber" style="margin-right: 0.5rem;">
-                                            <span>三位数序号 (000)</span>
-                                        </label>
-                                    </div>
+                            <div class="settings-column">
+                                <h4>元数据</h4>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="creatorID">
+                                    <label for="creatorID">制作者ID (CreatorID)</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="sourceID">
+                                    <label for="sourceID">项目ID (SourceID)</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="serialNumber">
+                                    <label for="serialNumber">三位数序号 (000)</label>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text flex items-center gap-2">
-                                        <i class="fas fa-user-edit"></i> 制作者ID
-                                    </span>
-                                </label>
-                                <input type="text" id="creatorIDValue" placeholder="例如: SFX" value="SFX" class="input input-bordered w-full">
+                        <div class="settings-group">
+                            <div class="setting-item">
+                                <label for="creatorIDValue"><i class="fas fa-user-edit"></i> 制作者ID：</label>
+                                <input type="text" id="creatorIDValue" placeholder="例如: SFX" value="SFX">
                             </div>
 
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text flex items-center gap-2">
-                                        <i class="fas fa-project-diagram"></i> 项目ID
-                                    </span>
-                                </label>
-                                <input type="text" id="sourceIDValue" placeholder="例如: UCS" value="UCS" class="input input-bordered w-full">
+                            <div class="setting-item">
+                                <label for="sourceIDValue"><i class="fas fa-project-diagram"></i> 项目ID：</label>
+                                <input type="text" id="sourceIDValue" placeholder="例如: UCS" value="UCS">
                             </div>
 
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text flex items-center gap-2">
-                                        <i class="fas fa-minus"></i> 分隔符
-                                    </span>
-                                </label>
-                                <select id="ucsSeparator" class="select select-bordered w-full">
+                            <div class="setting-item">
+                                <label for="ucsSeparator"><i class="fas fa-minus"></i> 分隔符：</label>
+                                <select id="ucsSeparator">
                                     <option value="_">下划线 (_)</option>
                                     <option value="-">连字符 (-)</option>
                                     <option value=".">点 (.)</option>
@@ -667,141 +696,101 @@
                             </div>
                         </div>
 
-                        <div class="card bg-base-100 shadow-sm p-4">
-                            <label class="label">
-                                <span class="label-text flex items-center gap-2">
-                                    <i class="fas fa-eye"></i> 命名预览
-                                </span>
-                            </label>
-                            <div id="namingPreview" class="p-3 bg-base-200 rounded-lg font-mono text-sm break-all">CatID_Category_zh_FXName_FXName_zh</div>
-                            <label class="label">
-                                <span class="label-text-alt text-gray-500">注意: CatID等值从文件名中提取或从英文名翻译</span>
-                            </label>
+                        <div class="preview-container">
+                            <label><i class="fas fa-eye"></i> 命名预览：</label>
+                            <div id="namingPreview" class="preview-box">CatID_Category_zh_FXName_FXName_zh</div>
+                            <small>注意: CatID等值从文件名中提取或从英文名翻译</small>
                         </div>
                     </div>
 
                     <!-- 传统命名规则设置 -->
-                    <div id="traditionalNamingOptions" class="bg-base-200 p-4 rounded-lg mt-6" style="display:none;">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text flex items-center gap-2">
-                                        <i class="fas fa-list-ol"></i> 命名格式
-                                    </span>
-                                </label>
-                                <select id="namingFormat" class="select select-bordered w-full">
+                    <div id="traditionalNamingOptions" class="settings-section" style="display:none;">
+                        <div class="settings-group">
+                            <div class="setting-item">
+                                <label for="namingFormat"><i class="fas fa-list-ol"></i> 命名格式：</label>
+                                <select id="namingFormat">
                                     <option value="category_name">分类_名称</option>
                                     <option value="name_only">仅名称</option>
                                     <option value="custom">自定义</option>
                                 </select>
                             </div>
-
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text flex items-center gap-2">
-                                        <i class="fas fa-minus"></i> 分隔符
-                                    </span>
-                                </label>
-                                <input type="text" id="separator" value="_" maxlength="1" class="input input-bordered w-full">
+                            <div class="setting-item custom-format" style="display: none;">
+                                <label for="customTemplate"><i class="fas fa-code"></i> 自定义模板：</label>
+                                <input type="text" id="customTemplate" placeholder="{category}-{name}">
+                            </div>
+                            <div class="setting-item">
+                                <label for="separator"><i class="fas fa-minus"></i> 分隔符：</label>
+                                <input type="text" id="separator" value="_" maxlength="1">
                             </div>
                         </div>
-
-                        <div id="customFormatContainer" class="form-control mt-4" style="display:none;">
-                            <label class="label">
-                                <span class="label-text flex items-center gap-2">
-                                    <i class="fas fa-code"></i> 自定义模板
-                                </span>
-                            </label>
-                            <input type="text" id="customTemplate" placeholder="{category}-{name}" class="input input-bordered w-full">
-                            <label class="label">
-                                <span class="label-text-alt text-gray-500">使用 {category}, {name}, {name_zh} 等变量来自定义命名格式</span>
-                            </label>
-                        </div>
-                    </div>
                     </div>
                 </section>
 
                 <!-- 翻译预览区域 -->
-                <section id="previewPanel" class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">
-                            <i class="fas fa-eye"></i> 预览与处理
-                        </h2>
+                <section id="previewPanel" class="section">
+                    <h2><i class="fas fa-eye"></i> 预览与处理</h2>
+
+                    <div id="previewPlaceholder" class="placeholder-message">
+                        <i class="fas fa-file-audio"></i>
+                        <p>请先选择文件，然后点击"开始翻译"进行处理</p>
                     </div>
-                    <div class="card-body">
 
-                        <div id="previewPlaceholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 0; color: var(--text-secondary);">
-                            <i class="fas fa-file-audio" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
-                            <p class="text-lg">请先选择文件，然后点击"开始翻译"进行处理</p>
-                        </div>
+                    <table id="previewTable" class="preview-table" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th width="5%"><input type="checkbox" id="selectAllFiles" checked></th>
+                                <th width="13%">原文件名</th>
+                                <th width="8%">CatID</th>
+                                <th width="8%">替代匹配</th>
+                                <th width="14%">英文描述(FXName)</th>
+                                <th width="14%">中文描述(FXName_zh)</th>
+                                <th width="28%">最终文件名</th>
+                                <th width="10%">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody">
+                            <!-- 文件预览行将在这里动态添加 -->
+                        </tbody>
+                    </table>
 
-                        <div class="overflow-x-auto" id="previewTable" style="display: none;">
-                            <table class="table table-zebra w-full">
-                                <thead>
-                                    <tr>
-                                        <th class="w-12">
-                                            <label>
-                                                <input type="checkbox" id="selectAllFiles" checked class="checkbox checkbox-sm">
-                                            </label>
-                                        </th>
-                                        <th>原文件名</th>
-                                        <th>CatID</th>
-                                        <th>替代匹配</th>
-                                        <th>英文描述</th>
-                                        <th>中文描述</th>
-                                        <th>最终文件名</th>
-                                        <th>状态</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="previewTableBody">
-                                    <!-- 文件预览行将在这里动态添加 -->
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div class="flex flex-wrap gap-3 mt-6">
-                            <button id="startTranslationBtn" class="btn btn-primary">
-                                <i class="fas fa-language mr-2"></i> 开始翻译
-                            </button>
-                            <button id="applyNamesBtn" class="btn btn-success" disabled>
-                                <i class="fas fa-check mr-2"></i> 应用文件名
-                            </button>
-                            <button id="backToFilesBtn" class="btn btn-outline">
-                                <i class="fas fa-arrow-left mr-2"></i> 返回
-                            </button>
-                        </div>
+                    <div class="action-buttons">
+                        <button id="startTranslationBtn" class="btn btn-primary">
+                            <i class="fas fa-language"></i> 开始翻译
+                        </button>
+                        <button id="applyNamesBtn" class="btn btn-success" disabled>
+                            <i class="fas fa-check"></i> 应用文件名
+                        </button>
+                        <button id="backToFilesBtn" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left"></i> 返回
+                        </button>
                     </div>
                 </section>
             </div>
         </main>
 
-        <footer class="bg-base-200 py-4 text-center text-gray-500 text-sm mt-8">
+        <footer class="app-footer">
             <p>音效文件名翻译重命名插件 v1.0.0</p>
         </footer>
 
         <!-- 状态提示 -->
-        <div id="statusMessage" class="fixed bottom-4 right-4 p-4 bg-primary text-white rounded-lg shadow-lg opacity-0 transform translate-y-4 transition-all duration-300 z-50 min-w-[200px] text-center font-medium"></div>
+        <div id="statusMessage" class="status-message"></div>
 
         <!-- 提示词预览对话框 -->
         <div id="promptPreviewModal" class="modal" style="display: none;">
-            <div class="modal-box max-w-3xl">
-                <h3 class="font-bold text-lg mb-4">当前提示词内容</h3>
-                <button class="btn btn-sm btn-circle absolute right-2 top-2">&times;</button>
-
-                <div class="space-y-4">
-                    <div class="card bg-base-200 p-4">
-                        <h4 class="font-medium text-primary mb-2">翻译提示词</h4>
-                        <pre id="translationPromptPreview" class="bg-base-100 p-3 rounded-md text-sm whitespace-pre-wrap overflow-x-auto"></pre>
-                    </div>
-
-                    <div class="card bg-base-200 p-4">
-                        <h4 class="font-medium text-primary mb-2">标准化提示词</h4>
-                        <pre id="standardizePromptPreview" class="bg-base-100 p-3 rounded-md text-sm whitespace-pre-wrap overflow-x-auto"></pre>
-                    </div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>当前提示词内容</h3>
+                    <span class="close">&times;</span>
                 </div>
-
-                <div class="modal-action">
-                    <button class="btn" onclick="document.getElementById('promptPreviewModal').style.display='none'">关闭</button>
+                <div class="modal-body">
+                    <div class="prompt-section">
+                        <h4>翻译提示词</h4>
+                        <pre id="translationPromptPreview" class="prompt-preview"></pre>
+                    </div>
+                    <div class="prompt-section">
+                        <h4>标准化提示词</h4>
+                        <pre id="standardizePromptPreview" class="prompt-preview"></pre>
+                    </div>
                 </div>
             </div>
         </div>
@@ -849,9 +838,6 @@
     </script>
 
     <!-- 加载脚本 -->
-    <!-- Vue 初始化 -->
-    <script src="./assets/js/vue-init.js"></script>
-
     <!-- 工具类 -->
     <script src="./assets/js/utils/logger.js"></script>
     <script src="./assets/js/utils/cache.js"></script>
@@ -868,7 +854,12 @@
     <script src="./assets/js/core/translation/providers/deepseek-provider.js"></script>
     <script src="./assets/js/core/translation/translation-service.js"></script>
     <script src="./assets/js/core/ai-classifier.js"></script>
+
+    <!-- 匹配器 -->
+    <script src="./assets/js/libs/papaparse.min.js"></script>
+    <script src="./assets/js/libs/fuse.min.js"></script>
     <script src="./assets/js/core/csv-matcher.js"></script>
+    <script src="./assets/js/core/fuse-matcher.js"></script>
     <script src="./assets/js/core/smart-classifier.js"></script>
     <script src="./assets/js/core/file-processor.js"></script>
     <script src="./assets/js/core/naming-rules.js"></script>
@@ -877,6 +868,7 @@
     <script src="./assets/js/ui/file-selector.js"></script>
     <script src="./assets/js/ui/translation-panel.js"></script>
     <script src="./assets/js/ui/preview-panel.js"></script>
+    <script src="./assets/js/ui/aliyun-nlp-panel.js"></script>
 
     <!-- 主脚本 -->
     <script src="./assets/js/plugin.js"></script>

@@ -18,7 +18,7 @@ class TranslationPanel {
             standardizeEnglish: false,
             namingStyle: 'none',
             customSeparator: '_',
-            matchStrategy: 'auto',
+            matchStrategy: 'auto',  // 确保默认值为'auto'
             useAIClassification: false
         };
 
@@ -335,7 +335,23 @@ class TranslationPanel {
         // 更新匹配策略选择
         const matchStrategySelect = document.getElementById('matchStrategy');
         if (matchStrategySelect) {
-            matchStrategySelect.value = this.settings.matchStrategy || 'auto';
+            // 如果没有保存的匹配策略或者值为'aliyun'，则使用'auto'作为默认值
+            if (!this.settings.matchStrategy || this.settings.matchStrategy === 'aliyun') {
+                this.settings.matchStrategy = 'auto';
+            }
+
+            // 设置下拉菜单的值
+            matchStrategySelect.value = this.settings.matchStrategy;
+
+            // 同步到智能分类器
+            if (window.pluginState && window.pluginState.smartClassifier) {
+                try {
+                    window.pluginState.smartClassifier.classificationSettings.defaultMatchStrategy = this.settings.matchStrategy;
+                    console.log('已设置默认匹配策略为:', this.settings.matchStrategy);
+                } catch (error) {
+                    console.error('设置默认匹配策略失败:', error);
+                }
+            }
         }
 
 

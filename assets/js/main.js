@@ -90,22 +90,58 @@ function initPlugin() {
         console.log('命名规则引擎初始化成功');
         updateLoadingStatus('命名规则引擎已就绪');
 
-        // 初始化CSV匹配器
+        // 初始化匹配器
         try {
-            console.log('CSV匹配器初始化开始');
+            console.log('匹配器初始化开始');
             updateLoadingStatus('加载术语库...');
-            window.pluginState.csvMatcher = new CSVMatcher('./assets/data/categorylist.csv');
-            console.log('CSV匹配器初始化完成');
-            updateLoadingStatus('术语库加载完成');
-        } catch (csvError) {
-            console.error('CSV匹配器初始化失败:', csvError);
+
+            // 检查必要的库是否可用
+            console.log('检查必要的库:');
+            console.log('- Fuse.js是否可用:', typeof Fuse !== 'undefined');
+            console.log('- Papaparse是否可用:', typeof Papa !== 'undefined');
+            console.log('- FuseMatcher是否可用:', typeof FuseMatcher !== 'undefined');
+
+            // 尝试直接使用FuseMatcher加载CSV文件
+            if (typeof Fuse !== 'undefined' && typeof Papa !== 'undefined' && typeof FuseMatcher !== 'undefined') {
+                try {
+                    console.log('开始直接使用FuseMatcher加载CSV文件...');
+
+                    // 创建FuseMatcher实例，直接传入CSV文件路径
+                    const fuseMatcher = new FuseMatcher('./assets/data/categorylist.csv');
+                    console.log('FuseMatcher实例创建成功');
+
+                    // 设置到全局状态
+                    window.pluginState.csvMatcher = fuseMatcher;
+                    console.log('Fuse匹配器初始化完成，直接从 CSV 文件加载数据');
+                    updateLoadingStatus('术语库加载完成，使用Fuse.js匹配引擎');
+                } catch (fuseError) {
+                    console.error('Fuse匹配器初始化失败:', fuseError);
+
+                    // 如果失败，回退到使用CSVMatcher
+                    console.log('回退到使用CSVMatcher...');
+                    const csvMatcher = new CSVMatcher('./assets/data/categorylist.csv');
+                    window.pluginState.csvMatcher = csvMatcher;
+                    updateLoadingStatus('术语库加载完成，回退到原始匹配引擎');
+                }
+            } else {
+                // 如果必要的库不可用，使用CSV匹配器
+                console.log('必要的库不可用，使用CSVMatcher...');
+                const csvMatcher = new CSVMatcher('./assets/data/categorylist.csv');
+                window.pluginState.csvMatcher = csvMatcher;
+                console.log('CSV匹配器初始化完成');
+                updateLoadingStatus('术语库加载完成，使用原始匹配引擎');
+            }
+        } catch (matcherError) {
+            console.error('匹配器初始化失败:', matcherError);
             updateLoadingStatus('术语库加载失败，使用默认配置');
-            // 创建一个空的CSV匹配器，避免后续代码出错
+            // 创建一个空匹配器，避免后续代码出错
             window.pluginState.csvMatcher = {
                 loaded: false,
+                initialized: false,
                 terms: [],
                 categories: [],
                 findMatch: function() { return null; },
+                getAllMatches: function() { return []; },
                 identifyCategory: function() { return ''; }
             };
         }
@@ -167,6 +203,9 @@ function initPlugin() {
 
                 // 初始化翻译设置
                 initTranslationSettings();
+
+                // 初始化分词与匹配面板
+                initTokenizationPanel();
 
                 window.pluginState.initialized = true;
                 console.log('UI组件初始化完成');
@@ -909,6 +948,132 @@ function initTranslationSettings() {
     }
 }
 
+/**
+ * 初始化分词与匹配面板
+ */
+function initTokenizationPanel() {
+    try {
+        console.log('初始化分词与匹配面板');
+
+        // 检查FuseMatcher是否可用
+        if (!window.pluginState.csvMatcher) {
+            console.warn('csvMatcher不可用，无法初始化分词与匹配面板');
+            return;
+        }
+
+        // 检查分词面板类是否可用
+        if (typeof TokenizationPanel === 'undefined') {
+            console.warn('TokenizationPanel类不可用，无法初始化分词与匹配面板');
+            return;
+        }
+
+        // 检查SmartClassifier类是否可用
+        if (typeof SmartClassifier === 'undefined') {
+            console.warn('SmartClassifier类不可用，无法初始化分词与匹配面板');
+            return;
+        }
+
+        // 查找已存在的SmartClassifier实例
+        let smartClassifier = null;
+
+        // 首先检查文件处理器中是否有SmartClassifier实例
+        if (window.pluginState.fileProcessor && window.pluginState.fileProcessor.smartClassifier) {
+            console.log('使用文件处理器中的SmartClassifier实例');
+            smartClassifier = window.pluginState.fileProcessor.smartClassifier;
+        }
+        // 然后检查csvMatcher中是否有SmartClassifier实例
+        else if (window.pluginState.csvMatcher.smartClassifier) {
+            console.log('使用csvMatcher中的SmartClassifier实例');
+            smartClassifier = window.pluginState.csvMatcher.smartClassifier;
+        }
+        // 如果都没有，创建一个新的实例
+        else {
+            console.log('创建新的SmartClassifier实例');
+            smartClassifier = new SmartClassifier(window.pluginState.csvMatcher);
+        }
+
+        // 确保csvMatcher中有smartClassifier实例
+        window.pluginState.csvMatcher.smartClassifier = smartClassifier;
+
+        // 确保文件处理器中也有同一个smartClassifier实例
+        if (window.pluginState.fileProcessor) {
+            window.pluginState.fileProcessor.smartClassifier = smartClassifier;
+
+            // 确保csvMatcher中的classifier也是同一个实例
+            if (window.pluginState.csvMatcher.classifier !== smartClassifier) {
+                window.pluginState.csvMatcher.classifier = smartClassifier;
+                console.log('已将smartClassifier实例同步到csvMatcher.classifier');
+            }
+        }
+
+        // 创建分词与匹配面板实例
+        window.pluginState.tokenizationPanel = new TokenizationPanel(
+            smartClassifier
+        );
+
+        // 输出smartClassifier的状态，用于调试
+        console.log('分词与匹配面板使用的SmartClassifier实例状态:', {
+            initialized: smartClassifier.initialized,
+            hasAliyunNLPAdapter: !!smartClassifier.aliyunNLPAdapter,
+            aliyunNLPAdapterInitialized: smartClassifier.aliyunNLPAdapter ? smartClassifier.aliyunNLPAdapter.initialized : false
+        });
+
+        console.log('分词与匹配面板初始化成功');
+
+        // 保持向后兼容
+        window.pluginState.aliyunNLPPanel = window.pluginState.tokenizationPanel;
+
+        // 绑定匹配策略选择器事件
+        const matchStrategySelect = document.getElementById('matchStrategy');
+        const aliyunMatchStrategySelect = document.getElementById('aliyunMatchStrategy');
+
+        if (matchStrategySelect && aliyunMatchStrategySelect) {
+            // 确保两个选择器都有初始值
+            if (!matchStrategySelect.value || matchStrategySelect.value === 'aliyun') {
+                matchStrategySelect.value = 'auto';
+            }
+
+            if (!aliyunMatchStrategySelect.value || aliyunMatchStrategySelect.value === 'aliyun') {
+                aliyunMatchStrategySelect.value = 'auto';
+            }
+
+            // 同步两个选择器的值
+            matchStrategySelect.addEventListener('change', function() {
+                // 如果选择了'aliyun'，改为'auto'
+                if (this.value === 'aliyun') {
+                    this.value = 'auto';
+                }
+
+                // 同步到阿里云匹配策略选择器
+                if (aliyunMatchStrategySelect) {
+                    aliyunMatchStrategySelect.value = this.value;
+                }
+
+                // 保存设置
+                if (window.pluginState && window.pluginState.translationPanel) {
+                    window.pluginState.translationPanel.settings.matchStrategy = this.value;
+                    window.pluginState.translationPanel._saveSettings();
+                }
+            });
+
+            aliyunMatchStrategySelect.addEventListener('change', function() {
+                // 同步到主匹配策略选择器
+                if (matchStrategySelect) {
+                    matchStrategySelect.value = this.value;
+                }
+
+                // 保存设置
+                if (window.pluginState && window.pluginState.translationPanel) {
+                    window.pluginState.translationPanel.settings.matchStrategy = this.value;
+                    window.pluginState.translationPanel._saveSettings();
+                }
+            });
+        }
+    } catch (error) {
+        console.error('初始化分词与匹配面板失败:', error);
+    }
+}
+
 // 检查所有必要的类是否已加载
 function checkDependencies() {
     const requiredClasses = [
@@ -928,7 +1093,10 @@ function checkDependencies() {
         'PreviewPanel',
         'Cache',
         'Logger',
-        'Validator'
+        'Validator',
+        'AliyunNLPAdapter',
+        'SmartClassifier',
+        'TokenizationPanel'
     ];
 
     const missing = [];

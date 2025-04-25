@@ -6,7 +6,7 @@ class FileProcessor {
     /**
      * 构造函数
      * @param {TranslationService} translationService - 翻译服务实例
-     * @param {CSVMatcher} csvMatcher - CSV匹配器实例
+     * @param {FuseMatcher|CSVMatcher} csvMatcher - 匹配器实例
      * @param {NamingRules} namingRules - 命名规则引擎实例
      */
     constructor(translationService, csvMatcher, namingRules) {
@@ -29,11 +29,64 @@ class FileProcessor {
      */
     _initSmartClassifier() {
         try {
-            if (window.SmartClassifier && this.csvMatcher) {
+            // 检查是否已经有SmartClassifier实例
+            let existingClassifier = null;
+
+            // 首先检查csvMatcher中是否有SmartClassifier实例
+            if (this.csvMatcher && this.csvMatcher.smartClassifier) {
+                console.log('使用csvMatcher中的SmartClassifier实例');
+                existingClassifier = this.csvMatcher.smartClassifier;
+            }
+            // 如果没有，检查全局状态中是否有SmartClassifier实例
+            else if (window.pluginState && window.pluginState.csvMatcher && window.pluginState.csvMatcher.smartClassifier) {
+                console.log('使用全局状态中的SmartClassifier实例');
+                existingClassifier = window.pluginState.csvMatcher.smartClassifier;
+            }
+
+            // 如果找到了现有实例，使用它
+            if (existingClassifier) {
+                this.smartClassifier = existingClassifier;
+
+                // 确保csvMatcher中的classifier也是同一个实例
+                if (this.csvMatcher && this.csvMatcher.classifier !== this.smartClassifier) {
+                    this.csvMatcher.classifier = this.smartClassifier;
+                    console.log('已将智能分类器设置到CSV匹配器中，用于过滤词汇');
+                }
+
+                console.log('智能分类器初始化成功（使用现有实例）');
+            }
+            // 如果没有找到现有实例，创建一个新的实例
+            else if (window.SmartClassifier && this.csvMatcher) {
+                console.log('创建新的SmartClassifier实例');
                 this.smartClassifier = new window.SmartClassifier(this.csvMatcher);
-                console.log('智能分类器初始化成功');
+
+                // 设置智能分类器实例，用于过滤词汇
+                this.csvMatcher.classifier = this.smartClassifier;
+
+                // 如果csvMatcher没有smartClassifier属性，设置它
+                if (!this.csvMatcher.smartClassifier) {
+                    this.csvMatcher.smartClassifier = this.smartClassifier;
+                }
+
+                // 如果有全局状态，也设置到全局状态中
+                if (window.pluginState && window.pluginState.csvMatcher) {
+                    window.pluginState.csvMatcher.smartClassifier = this.smartClassifier;
+                    window.pluginState.csvMatcher.classifier = this.smartClassifier;
+                }
+
+                console.log('智能分类器初始化成功（新实例）');
+                console.log('已将智能分类器设置到CSV匹配器中，用于过滤词汇');
             } else {
                 console.warn('智能分类器初始化失败: SmartClassifier类不可用');
+            }
+
+            // 输出smartClassifier的状态，用于调试
+            if (this.smartClassifier) {
+                console.log('文件处理器中的SmartClassifier实例状态:', {
+                    initialized: this.smartClassifier.initialized,
+                    hasAliyunNLPAdapter: !!this.smartClassifier.aliyunNLPAdapter,
+                    aliyunNLPAdapterInitialized: this.smartClassifier.aliyunNLPAdapter ? this.smartClassifier.aliyunNLPAdapter.initialized : false
+                });
             }
         } catch (error) {
             console.error('智能分类器初始化失败:', error);
@@ -224,22 +277,25 @@ class FileProcessor {
      * @private
      */
     async _classifyWithAI(file, filename, isChinese = false) {
+        // 如果文件已经成功匹配，跳过AI匹配
+        if (file.matchSuccessful) {
+            Logger.debug(`跳过AI匹配: 文件 "${filename}" 已经成功匹配`);
+            return null;
+        }
+
         if (!this.useCSV || !this.csvMatcher || !this.csvMatcher.loaded ||
             !this.csvMatcher.matchSettings.useAIClassification || !this.csvMatcher.aiClassifier) {
             return null;
         }
 
         try {
-            console.log(`尝试使用AI辅助分类匹配${isChinese ? '中文' : ''}文件名:`, filename,
-                        '分类器状态:', this.csvMatcher.aiClassifier.enabled,
-                        '翻译服务:', this.translationService ? '可用' : '不可用');
+            Logger.debug(`尝试使用AI辅助分类匹配${isChinese ? '中文' : ''}文件名: "${filename}"`);
 
             // 使用AI辅助分类器获取分类信息
             let aiClassification = await this.csvMatcher.aiClassifier.getClassification(filename, this.translationService, !isChinese);
 
             if (aiClassification) {
-                console.log(`文件 "${filename}" 使用AI辅助分类匹配结果:`, aiClassification);
-                Logger.debug(`文件 "${filename}" 使用AI辅助分类匹配结果:`, aiClassification);
+                Logger.debug(`文件 "${filename}" 使用AI辅助分类匹配结果: CatID=${aiClassification.catID || '无'}, 分类=${aiClassification.category || '无'}`);
 
                 // 使用智能分类器处理AI分类结果
                 let processedClassification = aiClassification;
@@ -249,18 +305,23 @@ class FileProcessor {
                     const smartResult = this.smartClassifier.processAIClassification(aiClassification, filename);
 
                     if (smartResult) {
-                        console.log(`智能分类器处理结果:`, smartResult);
+                        Logger.debug(`文件 "${filename}" 智能分类器处理结果: CatID=${smartResult.catID || '无'}, 分类=${smartResult.category || '无'}`);
                         processedClassification = smartResult;
                     } else {
-                        console.warn(`智能分类器处理失败，将尝试使用智能分类器直接分类文件名`);
+                        Logger.debug(`文件 "${filename}" 智能分类器处理失败，将尝试使用智能分类器直接分类文件名`);
 
-                        // 尝试使用智能分类器直接分类文件名
-                        const directClassification = this.smartClassifier.classifyFile(filename);
+                        // 尝试使用智能分类器的中心化匹配逻辑
+                        const options = {
+                            matchStrategy: 'auto',
+                            isChinese: isChinese
+                        };
+
+                        const directClassification = await this.smartClassifier.classifyFile(filename, null, options);
                         if (directClassification) {
-                            console.log(`智能分类器直接分类结果:`, directClassification);
+                            Logger.debug(`文件 "${filename}" 智能分类器中心化匹配结果: CatID=${directClassification.catID || '无'}, 分类=${directClassification.category || '无'}`);
                             processedClassification = directClassification;
                         } else {
-                            console.warn(`智能分类器直接分类失败，使用原始AI分类结果`);
+                            Logger.debug(`文件 "${filename}" 智能分类器中心化匹配失败，使用原始AI分类结果`);
                         }
                     }
                 } else {
@@ -270,24 +331,11 @@ class FileProcessor {
                         const validCatID = this.csvMatcher.isValidCatID(processedClassification.catID);
 
                         if (!validCatID) {
-                            console.warn(`文件 "${filename}" 的AI分类结果中的CatID "${processedClassification.catID}" 不在CSV表格中，将尝试使用CSV匹配器`);
+                            Logger.debug(`文件 "${filename}" 的AI分类结果中的CatID "${processedClassification.catID}" 不在CSV表格中，将尝试使用CSV匹配器`);
 
-                            // 尝试使用identifyCategory方法进行匹配
-                            const catID = await this.csvMatcher.identifyCategory(filename, this.translationService);
-                            if (catID) {
-                                const term = this.csvMatcher.findTermByCatID(catID);
-                                if (term) {
-                                    processedClassification = {
-                                        catID: term.catID,
-                                        catShort: term.catShort,
-                                        category: term.category,
-                                        category_zh: term.categoryNameZh,
-                                        subCategory: term.source,
-                                        subCategory_zh: term.target
-                                    };
-                                    console.log(`使用identifyCategory方法匹配成功: ${filename} -> ${processedClassification.catID}`);
-                                }
-                            }
+                            // 移除重复的匹配调用，这部分逻辑已经在smartClassifier.classifyFile中处理
+                            Logger.debug(`文件 "${filename}" 的AI分类结果中的CatID "${processedClassification.catID}" 不在CSV表格中，将跳过匹配`);
+                            processedClassification = null;
                         }
                     }
                 }
@@ -314,14 +362,16 @@ class FileProcessor {
                     file.subCategoryTranslated = fileCategory.target || '';
                     file.catID = fileCategory.catID || '';
 
-                    console.log(`文件 "${filename}" 应用AI分类结果: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
+                    // 更新匹配状态
+                    file.matchSuccessful = true;
+
+                    Logger.info(`文件 "${filename}" 应用AI分类结果: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
                     return fileCategory;
                 }
             }
             return null;
         } catch (aiError) {
-            console.error(`AI辅助分类匹配失败:`, aiError);
-            Logger.error(`AI辅助分类匹配失败:`, aiError);
+            Logger.error(`文件 "${filename}" AI辅助分类匹配失败: ${aiError.message}`);
             return null;
         }
     }
@@ -406,68 +456,48 @@ class FileProcessor {
                             file.standardizedName = englishName; // 对于中文文件名，使用反向翻译的英文名作为标准化名称
                             Logger.debug(`中文文件名反向翻译结果: ${englishName}`);
 
-                            // 直接进入双语匹配流程
+                            // 使用中心化的匹配逻辑处理中文文件名
                             if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded && this.smartClassifier) {
                                 try {
-                                    // 分析原始文件名和翻译后的文件名的词性
-                                    const originalPosAnalysis = this.smartClassifier.analyzePos(file.nameWithoutNumber);
-                                    const englishPosAnalysis = this.smartClassifier.analyzePos(englishName);
+                                    console.log(`中文文件 "${file.nameWithoutNumber}" 使用中心化匹配逻辑`);
 
                                     // 准备双语匹配选项
-                                    const bilingualOptions = {
+                                    const options = {
+                                        matchStrategy: 'bilingual', // 强制使用双语匹配
                                         translatedText: englishName,
-                                        translatedPosAnalysis: englishPosAnalysis
+                                        isChinese: true
                                     };
 
-                                    console.log('中文文件名直接进入双语匹配流程:', {
-                                        originalText: file.nameWithoutNumber,
-                                        translatedText: englishName,
-                                        originalPosAnalysis,
-                                        translatedPosAnalysis: englishPosAnalysis
-                                    });
+                                    // 使用智能分类器的中心化匹配逻辑
+                                    const smartResult = await this.smartClassifier.classifyFile(file.nameWithoutNumber, null, options);
 
-                                    // 获取所有匹配结果
-                                    const allMatches = this.csvMatcher.getAllMatches(
-                                        file.nameWithoutNumber,
-                                        originalPosAnalysis,
-                                        bilingualOptions
-                                    );
+                                    if (smartResult) {
+                                        // 应用匹配结果到文件
+                                        file.category = smartResult.catShort || '';
+                                        file.categoryName = smartResult.category || '';
+                                        file.categoryNameZh = smartResult.category_zh || '';
+                                        file.subCategory = smartResult.subCategory || '';
+                                        file.subCategoryTranslated = smartResult.subCategory_zh || '';
+                                        file.catID = smartResult.catID || '';
 
-                                    // 保存匹配结果
-                                    file.matchResults = allMatches;
-                                    file.availableMatchCount = allMatches.length;
-                                    file.currentMatchRank = 0; // 默认使用最佳匹配
+                                        // 保存匹配结果
+                                        if (smartResult.matchResults) {
+                                            file.matchResults = smartResult.matchResults;
+                                            file.availableMatchCount = smartResult.availableMatchCount || smartResult.matchResults.length;
+                                            file.currentMatchRank = 0; // 默认使用最佳匹配
+                                        }
 
-                                    // 使用双语匹配
-                                    const catID = await this.csvMatcher.identifyCategory(
-                                        file.nameWithoutNumber,
-                                        this.translationService,
-                                        originalPosAnalysis,
-                                        bilingualOptions
-                                    );
+                                        console.log(`中文文件 "${file.nameWithoutNumber}" 使用中心化匹配逻辑成功: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
+                                    } else {
+                                        console.log(`中文文件 "${file.nameWithoutNumber}" 中心化匹配逻辑未找到匹配结果`);
 
-                                    if (catID) {
-                                        // 查找对应的术语
-                                        const term = this.csvMatcher.findTermByCatID(catID);
-                                        if (term) {
-                                            // 应用匹配结果到文件
-                                            file.category = term.catShort || '';
-                                            file.categoryName = term.category || '';
-                                            file.categoryNameZh = term.categoryNameZh || '';
-                                            file.subCategory = term.source || '';
-                                            file.subCategoryTranslated = term.target || '';
-                                            file.catID = term.catID || '';
-
-                                            console.log(`中文文件 "${file.nameWithoutNumber}" 使用双语匹配成功: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
+                                        // 如果匹配失败，尝试使用AI辅助分类
+                                        if (this.csvMatcher.matchSettings.useAIClassification) {
+                                            await this._classifyWithAI(file, englishName, true);
                                         }
                                     }
                                 } catch (error) {
-                                    console.error('双语匹配失败:', error);
-
-                                    // 如果双语匹配失败，尝试使用AI辅助分类
-                                    if (!file.catID && this.csvMatcher.matchSettings.useAIClassification) {
-                                        await this._classifyWithAI(file, englishName, true);
-                                    }
+                                    console.error('中文文件匹配失败:', error);
                                 }
                             }
                         } catch (error) {
@@ -477,71 +507,8 @@ class FileProcessor {
                         }
                     } else {
                         // 非中文文件名的处理
-                        // 识别分类
-                        if (this.csvMatcher && this.csvMatcher.loaded) {
-                            // 先尝试使用identifyCategory方法进行匹配
-                            const catID = await this.csvMatcher.identifyCategory(file.name, this.translationService);
-                            if (catID) {
-                                const term = this.csvMatcher.findTermByCatID(catID);
-                                if (term) {
-                                    file.category = term.catShort || '';
-                                    file.categoryName = term.category || '';
-                                    file.categoryNameZh = term.categoryNameZh || '';
-                                    file.subCategory = term.source || '';
-                                    file.subCategoryTranslated = term.target || '';
-                                    file.catID = term.catID || '';
-                                    Logger.debug(`文件 "${file.name}" 使用identifyCategory匹配成功: 分类=${file.category}, 分类名=${file.categoryName}, 子分类=${file.subCategory}, 子分类翻译=${file.subCategoryTranslated}`);
-                                }
-                            } else {
-                                // 如果没有匹配到术语，尝试使用AI辅助分类匹配
-                                await this._classifyWithAI(file, file.name, false);
-
-                                // 如果AI分类失败或未启用，使用传统方式识别分类
-                                if (!file.catID) {
-                                    const catID = await this.csvMatcher.identifyCategory(file.name, this.translationService);
-                                    if (catID) {
-                                        const term = this.csvMatcher.findTermByCatID(catID);
-                                        if (term) {
-                                            file.category = term.catShort || '';
-                                            file.categoryName = term.category || '';
-                                            file.categoryNameZh = term.categoryNameZh || '';
-                                            file.subCategory = term.source || '';
-                                            file.subCategoryTranslated = term.target || '';
-                                            file.catID = term.catID || '';
-                                        }
-                                    }
-
-                                    // 如果没有识别到分类，尝试使用文件名的第一部分
-                                    if (!file.catID && file.name.indexOf(' ') !== -1) {
-                                        const firstPart = file.name.split(' ')[0];
-                                        const firstPartCatID = await this.csvMatcher.identifyCategory(firstPart, this.translationService);
-                                        if (firstPartCatID) {
-                                            const term = this.csvMatcher.findTermByCatID(firstPartCatID);
-                                            if (term) {
-                                                file.category = term.catShort || '';
-                                                file.categoryName = term.category || '';
-                                                file.categoryNameZh = term.categoryNameZh || '';
-                                                file.subCategory = term.source || '';
-                                                file.subCategoryTranslated = term.target || '';
-                                                file.catID = term.catID || '';
-
-                                                // 确保文件有匹配结果数组
-                                                if (!file.matchResults || !Array.isArray(file.matchResults)) {
-                                                    file.matchResults = [{
-                                                        term: term,
-                                                        score: 100,
-                                                        matchSource: 'firstPart',
-                                                        priority: 5
-                                                    }];
-                                                    file.availableMatchCount = 1;
-                                                    file.currentMatchRank = 0;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        // 识别分类 - 这部分逻辑已经移到了processTranslation方法中的智能分类器部分
+                        // 这里不再需要重复的匹配逻辑
                     }
 
                     // 从文件名中提取序号（如果还没有提取）
@@ -557,89 +524,49 @@ class FileProcessor {
                         Logger.debug(`文件名分解: "${file.name}" -> 文本: "${file.nameWithoutNumber}", 序号: ${file.numberPart || '无'}`);
                     }
 
+                    // 添加匹配状态跟踪
+                    file.matchAttempted = false;
+                    file.matchSuccessful = false;
 
                     // 使用通用的AI辅助分类匹配逻辑处理所有音效文件
                     let fileCategory = null;
 
-                    // 尝试使用AI辅助分类匹配
-                    fileCategory = await this._classifyWithAI(file, file.name, false);
+                    // 如果文件已经有分类信息，跳过匹配
+                    if (file.catID) {
+                        file.matchAttempted = true;
+                        file.matchSuccessful = true;
+                        Logger.debug(`文件 "${file.name}" 已经有分类信息，跳过匹配`);
+                    } else {
+                        // 尝试使用AI辅助分类匹配
+                        fileCategory = await this._classifyWithAI(file, file.name, false);
+                        file.matchAttempted = true;
+                        file.matchSuccessful = !!fileCategory;
+                    }
 
                     // 如果AI分类失败或未启用，尝试使用智能分类器和双语匹配
-                    if (!fileCategory && this.useCSV && this.csvMatcher && this.csvMatcher.loaded) {
+                    if (!file.matchSuccessful && this.useCSV && this.csvMatcher && this.csvMatcher.loaded) {
                         // 获取匹配策略
                         let matchStrategy = 'auto';
                         if (window.pluginState && window.pluginState.translationPanel) {
                             matchStrategy = window.pluginState.translationPanel.settings.matchStrategy || 'auto';
                         }
 
-                        // 如果有翻译结果，使用双语匹配
-                        if (file.translatedName && (matchStrategy === 'auto' || matchStrategy === 'bilingual')) {
+                        // 阿里云NLP服务仅用于分词和词性分析，不用于分类
+                        // 注意：matchStrategy中的'aliyun'选项已被移除，这里不再需要检查
+
+                        // 使用中心化的匹配逻辑处理非中文文件名
+                        if (!file.matchSuccessful && this.smartClassifier) {
                             try {
-                                // 分析原始文件名和翻译后的文件名的词性
-                                const originalPosAnalysis = this.smartClassifier ?
-                                    this.smartClassifier.analyzePos(file.nameWithoutNumber) : [];
-                                const translatedPosAnalysis = this.smartClassifier ?
-                                    this.smartClassifier.analyzePos(file.translatedName) : [];
+                                console.log(`文件 "${file.name}" 开始使用中心化匹配逻辑`);
 
-                                // 准备双语匹配选项
-                                const bilingualOptions = {
-                                    translatedText: file.translatedName,
-                                    translatedPosAnalysis: translatedPosAnalysis
-                                };
-
-
-
-                                // 获取所有匹配结果
-                                const allMatches = this.csvMatcher.getAllMatches(
-                                    file.nameWithoutNumber,
-                                    originalPosAnalysis,
-                                    bilingualOptions
-                                );
-
-                                // 保存匹配结果
-                                file.matchResults = allMatches;
-                                file.availableMatchCount = allMatches.length;
-                                file.currentMatchRank = 0; // 默认使用最佳匹配
-
-                                // 使用双语匹配
-                                const catID = await this.csvMatcher.identifyCategory(
-                                    file.nameWithoutNumber,
-                                    this.translationService,
-                                    originalPosAnalysis,
-                                    bilingualOptions
-                                );
-
-                                if (catID) {
-                                    // 查找对应的术语
-                                    const term = this.csvMatcher.findTermByCatID(catID);
-                                    if (term) {
-                                        fileCategory = term;
-
-                                        // 应用匹配结果到文件
-                                        file.category = fileCategory.catShort || '';
-                                        file.categoryName = fileCategory.category || '';
-                                        file.categoryNameZh = fileCategory.categoryNameZh || '';
-                                        file.subCategory = fileCategory.source || '';
-                                        file.subCategoryTranslated = fileCategory.target || '';
-                                        file.catID = fileCategory.catID || '';
-
-                                        console.log(`文件 "${file.name}" 使用双语匹配成功: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
-                                    }
-                                }
-                            } catch (error) {
-                                console.error('双语匹配失败:', error);
-                            }
-                        }
-
-                        // 如果双语匹配失败或未启用，尝试使用智能分类器
-                        if (!fileCategory && this.smartClassifier && (matchStrategy === 'auto' || matchStrategy === 'pos')) {
-                            try {
-                                // 使用智能分类器分类文件
+                                // 准备匹配选项
                                 const options = {
                                     matchStrategy: matchStrategy,
-                                    translatedText: file.translatedName
+                                    translatedText: file.translatedName,
+                                    isChinese: false
                                 };
 
+                                // 使用智能分类器的中心化匹配逻辑
                                 const smartResult = await this.smartClassifier.classifyFile(file.nameWithoutNumber, null, options);
                                 if (smartResult) {
                                     fileCategory = smartResult;
@@ -652,33 +579,29 @@ class FileProcessor {
                                     file.subCategoryTranslated = fileCategory.subCategory_zh || '';
                                     file.catID = fileCategory.catID || '';
 
-                                    console.log(`文件 "${file.name}" 使用智能分类器分类成功: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
+                                    // 保存匹配结果
+                                    if (smartResult.matchResults) {
+                                        file.matchResults = smartResult.matchResults;
+                                        file.availableMatchCount = smartResult.availableMatchCount || smartResult.matchResults.length;
+                                        file.currentMatchRank = 0; // 默认使用最佳匹配
+                                    }
+
+                                    // 更新匹配状态
+                                    file.matchSuccessful = true;
+
+                                    console.log(`文件 "${file.name}" 使用中心化匹配逻辑成功: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
+                                } else {
+                                    console.log(`文件 "${file.name}" 中心化匹配逻辑未找到匹配结果`);
                                 }
                             } catch (error) {
-                                console.error('智能分类器分类失败:', error);
+                                console.error('中心化匹配逻辑失败:', error);
                             }
                         }
 
                         // 如果上述方法都失败，尝试使用传统的CSV匹配
-                        if (!fileCategory) {
-                            // 使用identifyCategory方法进行匹配
-                            const catID = await this.csvMatcher.identifyCategory(file.nameWithoutNumber, this.translationService);
-                            if (catID) {
-                                const term = this.csvMatcher.findTermByCatID(catID);
-                                if (term) {
-                                    fileCategory = term;
-
-                                    // 应用匹配结果到文件
-                                    file.category = fileCategory.catShort || '';
-                                    file.categoryName = fileCategory.category || '';
-                                    file.categoryNameZh = fileCategory.categoryNameZh || '';
-                                    file.subCategory = fileCategory.source || '';
-                                    file.subCategoryTranslated = fileCategory.target || '';
-                                    file.catID = fileCategory.catID || '';
-
-                                    console.log(`文件 "${file.name}" 使用identifyCategory匹配成功: 分类=${file.categoryName}(${file.category}), 子分类=${file.subCategory}, CatID=${file.catID}`);
-                                }
-                            }
+                        // 注意：这里不再直接调用identifyCategory，因为它已经在smartClassifier.classifyFile中被调用了
+                        if (!file.matchSuccessful) {
+                            console.log(`文件 "${file.name}" 所有匹配方法都失败，使用默认分类`);
                         }
                     }
 
