@@ -289,6 +289,26 @@
                                         <option value="libre">LibreTranslate</option>
                                     </select>
                                 </div>
+
+                                <!-- 字符限制设置 -->
+                                <div class="setting-group">
+                                    <h4><i class="fas fa-text-width"></i> 翻译字符限制</h4>
+                                    <div class="setting-description">
+                                        <small>设置翻译结果的最大字符数，用于控制翻译结果的长度</small>
+                                    </div>
+
+                                    <div class="setting-item">
+                                        <label for="charLimitEn"><i class="fas fa-font"></i> 英文字符限制：</label>
+                                        <input type="number" id="charLimitEn" min="1" max="100" value="30" style="width: 80px;">
+                                        <small>字符</small>
+                                    </div>
+
+                                    <div class="setting-item">
+                                        <label for="charLimitZh"><i class="fas fa-font"></i> 中文字符限制：</label>
+                                        <input type="number" id="charLimitZh" min="1" max="50" value="7" style="width: 80px;">
+                                        <small>字</small>
+                                    </div>
+                                </div>
                             </div>
 
                             <div id="zhipuSettings" class="api-settings">

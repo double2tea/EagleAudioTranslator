@@ -19,7 +19,9 @@ class TranslationPanel {
             namingStyle: 'none',
             customSeparator: '_',
             matchStrategy: 'auto',  // 确保默认值为'auto'
-            useAIClassification: false
+            useAIClassification: false,
+            charLimitEn: 30,  // 英文字符限制默认值
+            charLimitZh: 7    // 中文字符限制默认值
         };
 
         // 初始化事件监听器
@@ -44,6 +46,41 @@ class TranslationPanel {
 
                 // 切换提供者后初始化该提供者的设置
                 this._initProviderSettings(providerSelect.value);
+            });
+        }
+
+        // 字符限制设置
+        const charLimitEnInput = document.getElementById('charLimitEn');
+        if (charLimitEnInput) {
+            charLimitEnInput.addEventListener('change', () => {
+                const value = parseInt(charLimitEnInput.value);
+                if (!isNaN(value) && value > 0) {
+                    this.settings.charLimitEn = value;
+                    this._saveSettings();
+
+                    // 更新提示词模板中的字符限制
+                    if (this.translationService.getActiveProvider() &&
+                        this.translationService.getActiveProvider().promptTemplates) {
+                        this.translationService.getActiveProvider().promptTemplates.setDefaultCharLimit('en', value);
+                    }
+                }
+            });
+        }
+
+        const charLimitZhInput = document.getElementById('charLimitZh');
+        if (charLimitZhInput) {
+            charLimitZhInput.addEventListener('change', () => {
+                const value = parseInt(charLimitZhInput.value);
+                if (!isNaN(value) && value > 0) {
+                    this.settings.charLimitZh = value;
+                    this._saveSettings();
+
+                    // 更新提示词模板中的字符限制
+                    if (this.translationService.getActiveProvider() &&
+                        this.translationService.getActiveProvider().promptTemplates) {
+                        this.translationService.getActiveProvider().promptTemplates.setDefaultCharLimit('zh', value);
+                    }
+                }
             });
         }
 
@@ -385,6 +422,32 @@ class TranslationPanel {
         if (customSeparatorInput) {
             customSeparatorInput.value = this.settings.customSeparator;
         }
+
+        // 更新字符限制设置
+        const charLimitEnInput = document.getElementById('charLimitEn');
+        if (charLimitEnInput && this.settings.charLimitEn) {
+            charLimitEnInput.value = this.settings.charLimitEn;
+        }
+
+        const charLimitZhInput = document.getElementById('charLimitZh');
+        if (charLimitZhInput && this.settings.charLimitZh) {
+            charLimitZhInput.value = this.settings.charLimitZh;
+        }
+
+        // 更新所有提供者的提示词模板中的字符限制
+        if (this.translationService) {
+            const providers = this.translationService.getProviders();
+            providers.forEach(provider => {
+                if (provider.promptTemplates) {
+                    if (this.settings.charLimitEn) {
+                        provider.promptTemplates.setDefaultCharLimit('en', this.settings.charLimitEn);
+                    }
+                    if (this.settings.charLimitZh) {
+                        provider.promptTemplates.setDefaultCharLimit('zh', this.settings.charLimitZh);
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -591,6 +654,12 @@ class TranslationPanel {
             const promptTemplateTextarea = document.querySelector(`#${this.translationService.getId()}Settings #promptTemplate`);
             const promptTemplate = promptTemplateTextarea ? promptTemplateTextarea.value : (this.settings.promptTemplate || '');
 
+            // 获取字符限制设置
+            const charLimitEnInput = document.getElementById('charLimitEn');
+            const charLimitZhInput = document.getElementById('charLimitZh');
+            const charLimitEn = charLimitEnInput ? parseInt(charLimitEnInput.value) : null;
+            const charLimitZh = charLimitZhInput ? parseInt(charLimitZhInput.value) : null;
+
             const sourceLanguage = this.settings.sourceLanguage || 'en';
             const targetLanguage = this.settings.targetLanguage || 'zh';
 
@@ -599,20 +668,24 @@ class TranslationPanel {
                 customPrompt,
                 promptTemplate,
                 sourceLanguage,
-                targetLanguage
+                targetLanguage,
+                charLimitEn,
+                charLimitZh
             });
 
-            // 获取翻译提示词
+            // 获取翻译提示词，根据目标语言选择字符限制
+            const charLimit = targetLanguage.startsWith('zh') ? charLimitZh : charLimitEn;
             const translationPrompt = promptTemplates.getTranslationPrompt(
                 customPrompt,
                 '[Your text here]',
                 sourceLanguage,
                 targetLanguage,
-                promptTemplate
+                promptTemplate,
+                charLimit
             );
 
             // 获取标准化提示词
-            const standardizePrompt = promptTemplates.getStandardizePrompt('[Your text here]');
+            const standardizePrompt = promptTemplates.getStandardizePrompt('[Your text here]', 'en', charLimitEn);
 
             // 更新预览内容
             document.getElementById('translationPromptPreview').textContent = translationPrompt;
@@ -632,14 +705,18 @@ class TranslationPanel {
      * @private
      */
     _showError(message) {
-        const errorContainer = document.getElementById('errorContainer');
-        if (errorContainer) {
-            errorContainer.textContent = message;
-            errorContainer.style.display = 'block';
+        console.error('翻译面板错误:', message);
+
+        // 使用状态消息显示错误
+        const statusMessage = document.getElementById('statusMessage');
+        if (statusMessage) {
+            statusMessage.textContent = `错误: ${message}`;
+            statusMessage.className = 'status-message error';
+            statusMessage.style.display = 'block';
 
             // 5秒后自动隐藏错误消息
             setTimeout(() => {
-                errorContainer.style.display = 'none';
+                statusMessage.style.display = 'none';
             }, 5000);
         }
     }
