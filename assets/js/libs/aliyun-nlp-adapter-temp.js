@@ -33,10 +33,29 @@
 
             // 初始化状态
             this.initialized = false;
-            this.requestCount = 0; // 请求计数器，用于限制请求频率
             this.maxRequestPerDay = 50000; // 每天最大请求次数，防止超出免费额度
-            this.lastResetDay = new Date().getDate(); // 上次重置计数器的日期
             this._lastRequestFailed = false; // 上次请求是否失败
+
+            // 创建缓存实例，用于持久化存储请求计数
+            this.cache = new Cache('aliyun-nlp-stats');
+
+            // 从缓存中读取请求计数和上次重置日期
+            const today = new Date().getDate();
+            const cachedStats = this.cache.get('requestStats');
+
+            if (cachedStats && cachedStats.lastResetDay === today) {
+                // 如果缓存中的日期与今天相同，使用缓存中的计数
+                this.requestCount = cachedStats.requestCount || 0;
+                this.lastResetDay = cachedStats.lastResetDay;
+                console.log('从缓存中恢复请求计数:', this.requestCount);
+            } else {
+                // 如果缓存中的日期与今天不同，重置计数
+                this.requestCount = 0;
+                this.lastResetDay = today;
+                // 保存到缓存
+                this._saveStatsToCache();
+                console.log('重置请求计数为0（新的一天）');
+            }
 
             // 初始化
             this.init();
@@ -69,6 +88,18 @@
         }
 
         /**
+         * 将请求统计信息保存到缓存中
+         * @private
+         */
+        _saveStatsToCache() {
+            this.cache.set('requestStats', {
+                requestCount: this.requestCount,
+                lastResetDay: this.lastResetDay,
+                timestamp: Date.now()
+            }, 7 * 24 * 60 * 60 * 1000); // 保存7天
+        }
+
+        /**
          * 检查请求限制
          * @returns {boolean} 是否可以发送请求
          * @private
@@ -79,6 +110,8 @@
             if (today !== this.lastResetDay) {
                 this.requestCount = 0;
                 this.lastResetDay = today;
+                // 保存重置后的统计信息到缓存
+                this._saveStatsToCache();
             }
 
             // 检查是否超出每日请求限制
@@ -89,6 +122,8 @@
 
             // 增加请求计数
             this.requestCount++;
+            // 保存更新后的统计信息到缓存
+            this._saveStatsToCache();
             return true;
         }
 
