@@ -105,7 +105,9 @@ class FileProcessor {
             Logger.info(`获取文件夹 ${folderId} 中的文件`);
 
             // 获取指定文件夹中的文件
-            const items = await eagle.item.getByFolderId(folderId);
+            const items = await eagle.item.get({
+                folders: [folderId]
+            });
 
             if (!items || items.length === 0) {
                 Logger.warn(`文件夹 ${folderId} 中没有文件`);
@@ -130,7 +132,9 @@ class FileProcessor {
             Logger.info(`获取带标签 "${tag}" 的文件`);
 
             // 获取带指定标签的文件
-            const items = await eagle.item.getByTag(tag);
+            const items = await eagle.item.get({
+                tags: [tag]
+            });
 
             if (!items || items.length === 0) {
                 Logger.warn(`没有带标签 "${tag}" 的文件`);
@@ -155,13 +159,18 @@ class FileProcessor {
         try {
             // 转换为内部文件格式
             const files = items.map(item => {
-                const extension = item.ext || NamingUtils.getExtension(item.name) || '';
+                // Eagle API的正确属性访问方式 - 直接访问属性
+                const itemName = item.name || 'unknown';
+                const itemExt = item.ext || NamingUtils.getExtension(itemName) || '';
+                const itemPath = item.path || '';
+                const itemId = item.id || '';
+
                 return {
-                    id: item.id,
-                    name: NamingUtils.getNameWithoutExtension(item.name),
-                    originalName: item.name, // 保存原始文件名，便于调试
-                    path: item.path || '',
-                    extension: extension.toLowerCase(),
+                    id: itemId,
+                    name: NamingUtils.getNameWithoutExtension(itemName),
+                    originalName: itemName, // 保存原始文件名
+                    path: itemPath,
+                    extension: itemExt.toLowerCase(),
                     translatedName: '',
                     formattedName: '',
                     category: '',
@@ -246,11 +255,16 @@ class FileProcessor {
         // 处理基本命名属性
         const processedFile = NamingUtils.processFileName(file, options);
 
-        // 更新文件对象
+        // 更新文件对象，但保留originalName
         file.isChinese = processedFile.isChinese;
         file.nameWithoutNumber = processedFile.nameWithoutNumber;
         file.numberPart = processedFile.numberPart;
         file.numberFormat = processedFile.numberFormat;
+
+        // 确保originalName不被覆盖
+        if (!file.originalName) {
+            file.originalName = file.name + (file.extension ? '.' + file.extension : '');
+        }
 
         if (file.isChinese) {
             // 处理中文文件名
@@ -312,8 +326,11 @@ class FileProcessor {
      * @private
      */
     async _processNonChineseFileName(file) {
+        // 🔥 关键修复：如果AI已经设置了英文描述，不要覆盖它
+        const hasAIDescription = file.standardizedName && file.matchSuccessful && file.standardizedName !== file.nameWithoutNumber;
+
         // 处理标准化名称
-        if (this.translationService.settings.standardizeEnglish) {
+        if (this.translationService.settings.standardizeEnglish && !hasAIDescription) {
             try {
                 // 生成标准化的英文描述
                 let standardizedName = await this.translationService.standardize(file.nameWithoutNumber);
@@ -332,14 +349,31 @@ class FileProcessor {
                 }
 
                 file.standardizedName = standardizedName;
+                console.log(`📝 使用翻译服务标准化: ${file.name} -> ${standardizedName}`);
             } catch (error) {
                 Logger.error(`文件 "${file.name}" 标准化失败`, error);
                 // 如果标准化失败，使用原始文件名
                 file.standardizedName = file.nameWithoutNumber;
             }
-        } else {
-            // 如果没有启用标准化，使用原始文件名
+        } else if (!hasAIDescription) {
+            // 如果没有启用标准化且没有AI描述，使用原始文件名
             file.standardizedName = file.nameWithoutNumber;
+        } else {
+            // 如果有AI描述，应用命名风格但不覆盖内容
+            console.log(`🤖 保持AI英文描述: ${file.name} -> ${file.standardizedName}`);
+
+            // 确保AI描述也应用了命名风格
+            const options = this._buildNamingOptions(true);
+            const formattedDescription = NamingUtils.applyNamingStyle(
+                file.standardizedName,
+                options.namingStyle,
+                options.customSeparator
+            );
+
+            if (formattedDescription !== file.standardizedName) {
+                console.log(`🎨 对AI描述应用命名风格: ${file.standardizedName} -> ${formattedDescription}`);
+                file.standardizedName = formattedDescription;
+            }
         }
 
         // 直接使用翻译服务处理FXname_zh
@@ -403,6 +437,62 @@ class FileProcessor {
     }
 
     /**
+     * 批量AI分类处理
+     * @param {Array} fileItems - 需要分类的文件项数组 [{file, index}]
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _batchClassifyWithAI(fileItems) {
+        if (!fileItems || fileItems.length === 0) return;
+
+        try {
+            console.log(`🚀 批量AI分类开始，处理 ${fileItems.length} 个文件`);
+
+            // 按批次大小分组处理
+            const batchSize = 10;
+            for (let i = 0; i < fileItems.length; i += batchSize) {
+                const batch = fileItems.slice(i, i + batchSize);
+                console.log(`处理批次 ${Math.floor(i/batchSize) + 1}，文件 ${i + 1}-${Math.min(i + batchSize, fileItems.length)}`);
+
+                // 创建批量请求的Promise数组
+                const batchPromises = batch.map(async ({ file, index }) => {
+                    try {
+                        const result = await this._classifyWithAI(file, file.name, false);
+                        return { file, index, result, success: !!result };
+                    } catch (error) {
+                        console.error(`文件 "${file.name}" AI分类失败:`, error);
+                        return { file, index, result: null, success: false, error };
+                    }
+                });
+
+                // 等待当前批次完成
+                const batchResults = await Promise.all(batchPromises);
+
+                // 处理批次结果
+                batchResults.forEach(({ file, success }) => {
+                    file.matchAttempted = true;
+                    file.matchSuccessful = success;
+
+                    if (success) {
+                        console.log(`✅ 批量AI分类成功: ${file.name} -> ${file.catID}`);
+                    } else {
+                        console.log(`❌ 批量AI分类失败: ${file.name}`);
+                    }
+                });
+
+                // 批次间添加短暂延迟，避免API限制
+                if (i + batchSize < fileItems.length) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+
+            console.log(`🎉 批量AI分类完成，共处理 ${fileItems.length} 个文件`);
+        } catch (error) {
+            console.error('批量AI分类失败:', error);
+        }
+    }
+
+    /**
      * 使用AI进行文件分类
      * @param {Object} file - 文件对象
      * @param {string} filename - 用于分类的文件名
@@ -423,31 +513,74 @@ class FileProcessor {
 
         try {
             // 使用AI辅助分类器获取分类信息
-            let aiClassification = await this.csvMatcher.aiClassifier.getClassification(filename, this.translationService, !isChinese);
-            if (!aiClassification) return null;
+            let aiResult = await this.csvMatcher.aiClassifier.getClassification(filename, this.translationService, !isChinese);
+            if (!aiResult) return null;
 
-            // 使用智能分类器处理AI分类结果
-            if (this.smartClassifier && this.smartClassifier.initialized) {
-                // 先尝试处理AI分类结果
-                const smartResult = this.smartClassifier.processAIClassification(aiClassification, filename);
+            let aiClassification = null;
 
-                if (smartResult) {
-                    aiClassification = smartResult;
-                } else {
-                    // 如果处理失败，尝试直接分类
-                    const directClassification = await this.smartClassifier.classifyFile(filename, null, {
-                        matchStrategy: 'auto',
-                        isChinese: isChinese
-                    });
+            // 处理多分类选项格式
+            if (aiResult.classifications && Array.isArray(aiResult.classifications)) {
+                console.log(`文件 "${filename}" 获得 ${aiResult.classifications.length} 个AI分类选项，开始验证`);
 
-                    if (directClassification) {
-                        aiClassification = directClassification;
+                // 按置信度排序，尝试找到第一个有效的分类
+                const sortedClassifications = aiResult.classifications.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
+                for (let i = 0; i < sortedClassifications.length; i++) {
+                    const classification = sortedClassifications[i];
+
+                    // 验证CatID是否有效
+                    if (this.csvMatcher.isValidCatID(classification.catID)) {
+                        console.log(`✅ AI分类成功: 选项 ${i + 1} - ${classification.catID} (置信度: ${classification.confidence})`);
+                        aiClassification = classification;
+                        break;
                     }
                 }
-            } else if (aiClassification.catID) {
+
+                if (!aiClassification) {
+                    console.warn(`⚠️ 文件 "${filename}" 的所有AI分类选项都无效`);
+                    // 使用第一个选项进行替代查找
+                    aiClassification = sortedClassifications[0];
+                }
+            }
+            // 兼容旧的单分类格式
+            else {
+                aiClassification = aiResult;
+            }
+
+            if (!aiClassification) return null;
+
+            // AI分类已经验证成功，直接使用结果
+            // 不需要再次验证，避免重复逻辑
+
+            // 如果AI分类失败，尝试查找替代分类
+            if (aiClassification.catID) {
                 // 如果智能分类器不可用，验证CatID是否有效
                 if (!this.csvMatcher.isValidCatID(aiClassification.catID)) {
-                    return null;
+                    console.warn(`AI生成的CatID "${aiClassification.catID}" 在CSV数据中不存在，尝试查找相似的分类`);
+
+                    // 尝试根据分类和子分类查找有效的术语
+                    const validTerm = this.csvMatcher.findTermByCategory(aiClassification.category, aiClassification.subCategory);
+                    if (validTerm) {
+                        console.log(`找到有效的替代分类: ${validTerm.catID}`);
+                        // 使用找到的有效术语更新AI分类结果
+                        aiClassification.catID = validTerm.catID;
+                        aiClassification.catShort = validTerm.catShort;
+                    } else {
+                        // 如果找不到有效的分类，尝试部分匹配
+                        const partialTerm = this.csvMatcher.findTermByPartialKeyword(aiClassification.subCategory);
+                        if (partialTerm) {
+                            console.log(`通过部分匹配找到分类: ${partialTerm.catID}`);
+                            aiClassification.catID = partialTerm.catID;
+                            aiClassification.catShort = partialTerm.catShort;
+                            aiClassification.category = partialTerm.category;
+                            aiClassification.category_zh = partialTerm.categoryNameZh;
+                            aiClassification.subCategory = partialTerm.source;
+                            aiClassification.subCategory_zh = partialTerm.target;
+                        } else {
+                            console.warn(`无法找到AI分类 "${aiClassification.catID}" 的有效替代，跳过AI分类结果`);
+                            return null;
+                        }
+                    }
                 }
             }
 
@@ -472,6 +605,37 @@ class FileProcessor {
             file.subCategory = fileCategory.source || '';
             file.subCategoryTranslated = fileCategory.target || '';
             file.catID = fileCategory.catID || '';
+
+            // 🔥 关键修复：保存AI生成的英文描述作为标准化名称
+            if (aiClassification.englishDescription) {
+                file.standardizedName = aiClassification.englishDescription;
+                console.log(`✅ 保存AI英文描述作为标准化名称: ${file.name} -> ${aiClassification.englishDescription}`);
+
+                // 🎨 立即应用命名风格到AI英文描述
+                try {
+                    const options = this._buildNamingOptions(true);
+                    console.log(`🔧 命名风格设置检查: namingStyle="${options.namingStyle}", customSeparator="${options.customSeparator}"`);
+                    console.log(`🔧 翻译服务设置:`, this.translationService?.settings);
+
+                    const formattedDescription = NamingUtils.applyNamingStyle(
+                        file.standardizedName,
+                        options.namingStyle,
+                        options.customSeparator
+                    );
+
+                    console.log(`🔧 命名风格应用结果: "${file.standardizedName}" -> "${formattedDescription}"`);
+
+                    if (formattedDescription !== file.standardizedName) {
+                        console.log(`🎨 对AI描述应用命名风格: ${file.standardizedName} -> ${formattedDescription}`);
+                        file.standardizedName = formattedDescription;
+                    } else {
+                        console.log(`📝 AI描述无需格式化: ${file.standardizedName} (命名风格: ${options.namingStyle})`);
+                    }
+                } catch (error) {
+                    console.error(`命名风格应用失败: ${error.message}`, error);
+                }
+            }
+
             file.matchSuccessful = true;
 
             return fileCategory;
@@ -506,13 +670,11 @@ class FileProcessor {
             // 复制文件数组，避免修改原数组
             const fileObjects = [...files];
 
-            for (let i = 0; i < fileObjects.length; i++) {
-                // 检查是否暂停
-                if (this.pauseTranslation) {
-                    Logger.info(`翻译已暂停，已处理 ${i} 个文件`);
-                    break;
-                }
+            // 🚀 批量AI分类优化：先收集需要AI分类的文件，然后批量处理
+            const needsAIClassification = [];
 
+            // 第一阶段：预处理和收集需要AI分类的文件
+            for (let i = 0; i < fileObjects.length; i++) {
                 const file = fileObjects[i];
                 try {
                     // 处理文件名，提取序号和准备翻译
@@ -522,19 +684,40 @@ class FileProcessor {
                     file.matchAttempted = false;
                     file.matchSuccessful = false;
 
-                    // 使用通用的AI辅助分类匹配逻辑处理所有音效文件
-                    let fileCategory = null;
-
-                    // 如果文件已经有分类信息，跳过匹配
+                    // 如果文件已经有分类信息，跳过AI分类
                     if (file.catID) {
                         file.matchAttempted = true;
                         file.matchSuccessful = true;
                         Logger.debug(`文件 "${file.name}" 已经有分类信息，跳过匹配`);
-                    } else {
-                        // 尝试使用AI辅助分类匹配
-                        fileCategory = await this._classifyWithAI(file, file.name, false);
-                        file.matchAttempted = true;
-                        file.matchSuccessful = !!fileCategory;
+                    } else if (this.useCSV && this.csvMatcher && this.csvMatcher.loaded &&
+                              this.csvMatcher.matchSettings.useAIClassification && this.csvMatcher.aiClassifier) {
+                        // 收集需要AI分类的文件
+                        needsAIClassification.push({ file, index: i });
+                    }
+                } catch (error) {
+                    Logger.error(`文件 "${file.name}" 预处理失败`, error);
+                }
+            }
+
+            // 第二阶段：批量AI分类
+            if (needsAIClassification.length > 0) {
+                console.log(`🤖 开始批量AI分类，共 ${needsAIClassification.length} 个文件`);
+                await this._batchClassifyWithAI(needsAIClassification);
+            }
+
+            // 第三阶段：处理每个文件的后续逻辑
+            for (let i = 0; i < fileObjects.length; i++) {
+                // 检查是否暂停
+                if (this.pauseTranslation) {
+                    Logger.info(`翻译已暂停，已处理 ${i} 个文件`);
+                    break;
+                }
+
+                const file = fileObjects[i];
+                try {
+                    // AI分类已经在批量阶段完成，这里只需要检查结果
+                    if (file.matchSuccessful) {
+                        console.log(`文件 "${file.name}" AI分类成功: CatID=${file.catID}, 分类=${file.categoryName}(${file.category})`);
                     }
 
                     // 如果AI分类失败或未启用，尝试使用智能分类器和双语匹配
@@ -698,8 +881,8 @@ class FileProcessor {
                     // 更新文件名
                     item.name = newName;
 
-                    // 调用Eagle API更新文件
-                    await eagle.item.update(file.id, item);
+                    // 调用Eagle API保存文件修改
+                    await item.save();
 
                     results.push({
                         id: file.id,

@@ -499,6 +499,62 @@ body {
     color: var(--info-color);
 }
 
+/* 语义匹配设置样式 */
+.setting-group {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    border-radius: 8px;
+    background-color: var(--light-color);
+    border-left: 4px solid var(--primary-color);
+}
+
+.setting-group h4 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--primary-color);
+}
+
+.setting-description {
+    margin-bottom: 1rem;
+    color: var(--secondary-color);
+}
+
+.setting-toggle {
+    margin-bottom: 1rem;
+}
+
+.api-settings {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 6px;
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+}
+
+.validation-pending {
+    color: var(--info-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.validation-success {
+    color: var(--success-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.validation-error {
+    color: var(--danger-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 /* 替代匹配下拉菜单样式 */
 .alt-match-select {
     width: 100%;
@@ -905,4 +961,327 @@ textarea {
 .status-disabled {
     color: var(--secondary-color);
     font-style: italic;
+}
+
+/* 文件夹树内联样式 */
+.folder-tree-section {
+    margin-top: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--background-color);
+    overflow: hidden;
+}
+
+.folder-tree-section h3 {
+    margin: 0;
+    padding: 16px 20px;
+    background: var(--light-color);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.folder-tree-section h3 i {
+    margin-right: 8px;
+    color: var(--primary-color);
+}
+
+.folder-tree-inline {
+    display: flex;
+    flex-direction: column;
+}
+
+.folder-tree-controls {
+    border-bottom: 1px solid var(--border-color);
+    background: var(--background-color);
+}
+
+.folder-tree-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: 300px;
+}
+
+.folder-tree-search {
+    position: relative;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px 40px 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    background: var(--background-color);
+    color: var(--text-color);
+    transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.1);
+}
+
+.search-icon {
+    position: absolute;
+    right: 36px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--secondary-color);
+    pointer-events: none;
+}
+
+.folder-tree-options {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--light-color);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-color);
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin-right: 8px;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.checkbox-label .checkmark {
+    margin-left: 4px;
+}
+
+.folder-tree-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    max-height: 250px;
+    min-height: 200px;
+}
+
+.loading-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: var(--secondary-color);
+    font-size: 14px;
+}
+
+.loading-message i {
+    margin-right: 8px;
+}
+
+.folder-tree-status {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--light-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.selected-folder-info {
+    flex: 1;
+    margin-right: 16px;
+}
+
+.selected-folder-info span {
+    display: block;
+    font-size: 14px;
+}
+
+#selectedFolderName {
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 2px;
+}
+
+.folder-count {
+    color: var(--secondary-color);
+    font-size: 12px;
+}
+
+.folder-tree-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.folder-tree-actions .btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: var(--secondary-color);
+    filter: brightness(0.9);
+}
+
+.btn-primary:disabled {
+    background: var(--secondary-color);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* 文件夹树项样式 */
+.folder-tree-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-left: 3px solid transparent;
+    user-select: none;
+}
+
+.folder-tree-item:hover {
+    background-color: var(--hover-color);
+}
+
+.folder-tree-item.selected {
+    background-color: rgba(74, 108, 247, 0.1);
+    border-left-color: var(--primary-color);
+}
+
+.folder-tree-item.has-children {
+    position: relative;
+}
+
+.folder-expand-toggle {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 4px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background-color 0.2s ease;
+}
+
+.folder-expand-toggle:hover {
+    background-color: var(--hover-color);
+}
+
+.folder-expand-toggle i {
+    font-size: 10px;
+    color: var(--secondary-color);
+    transition: transform 0.2s ease;
+}
+
+.folder-tree-item.expanded .folder-expand-toggle i {
+    transform: rotate(90deg);
+}
+
+.folder-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.folder-name {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folder-count {
+    font-size: 12px;
+    color: var(--secondary-color);
+    margin-left: 8px;
+    background: var(--light-color);
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.folder-children {
+    margin-left: 20px;
+    border-left: 1px solid var(--border-color);
+    display: none;
+}
+
+.folder-tree-item.expanded + .folder-children {
+    display: block;
+}
+
+.folder-tree-item.no-children .folder-expand-toggle {
+    visibility: hidden;
+}
+
+/* 搜索高亮 */
+.folder-name .highlight {
+    background-color: yellow;
+    color: black;
+    padding: 1px 2px;
+    border-radius: 2px;
+}
+
+/* 空状态 */
+.folder-tree-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: var(--secondary-color);
+    font-size: 14px;
+}
+
+.folder-tree-empty i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .folder-tree-search {
+        padding: 12px 16px;
+    }
+
+    .folder-tree-options {
+        padding: 12px 16px;
+    }
+
+    .folder-tree-status {
+        padding: 12px 16px;
+        flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
+    }
+
+    .selected-folder-info {
+        margin-right: 0;
+        text-align: center;
+    }
 }

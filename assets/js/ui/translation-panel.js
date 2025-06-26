@@ -10,7 +10,7 @@ class TranslationPanel {
     constructor(translationService) {
         this.translationService = translationService;
         this.settings = {
-            provider: 'google',
+            provider: 'zhipu',
             sourceLanguage: 'en',
             targetLanguage: 'zh',
             useCache: true,
@@ -21,7 +21,9 @@ class TranslationPanel {
             matchStrategy: 'auto',  // 确保默认值为'auto'
             useAIClassification: false,
             charLimitEn: 30,  // 英文字符限制默认值
-            charLimitZh: 7    // 中文字符限制默认值
+            charLimitZh: 7,   // 中文字符限制默认值
+            apiKeys: {},      // 初始化API密钥对象
+            bailianModel: 'qwen-max' // 初始化百炼模型
         };
 
         // 初始化事件监听器
@@ -29,6 +31,41 @@ class TranslationPanel {
 
         // 加载初始设置
         this._loadSettings();
+
+        // 确保设置被正确应用
+        this._ensureSettingsApplied();
+    }
+
+    /**
+     * 确保设置被正确应用
+     * @private
+     */
+    _ensureSettingsApplied() {
+        // 确保API密钥对象存在
+        if (!this.settings.apiKeys) {
+            this.settings.apiKeys = {};
+            this._saveSettings();
+        }
+
+        // 确保百炼模型设置存在
+        if (!this.settings.bailianModel) {
+            this.settings.bailianModel = 'qwen-max';
+            this._saveSettings();
+        }
+
+        // 确保设置被应用到翻译服务
+        this.translationService.setSettings(this.settings);
+
+        // 如果当前提供者是百炼，确保百炼模型被设置
+        if (this.settings.provider === 'bailian') {
+            this.translationService.setBailianModel(this.settings.bailianModel);
+
+            // 如果有API密钥，确保它被设置
+            if (this.settings.apiKeys.bailian) {
+                this.translationService.setAPIKey('bailian', this.settings.apiKeys.bailian);
+                Logger.info(`已设置bailianAPI密钥: ${this.settings.apiKeys.bailian ? '******' : '(空)'}`);
+            }
+        }
     }
 
     /**
@@ -40,12 +77,18 @@ class TranslationPanel {
         const providerSelect = document.getElementById('translationProvider');
         if (providerSelect) {
             providerSelect.addEventListener('change', () => {
-                this.settings.provider = providerSelect.value;
+                const providerId = providerSelect.value;
+                this.settings.provider = providerId;
                 this._saveSettings();
-                this.translationService.setActiveProvider(providerSelect.value);
+                this.translationService.setActiveProvider(providerId);
+
+                // 显示当前提供者的设置面板
+                this._showProviderSettings(providerId);
 
                 // 切换提供者后初始化该提供者的设置
-                this._initProviderSettings(providerSelect.value);
+                this._initProviderSettings(providerId);
+
+                console.log(`已切换到翻译提供者: ${providerId}`);
             });
         }
 
@@ -88,7 +131,7 @@ class TranslationPanel {
         this._initAllProviderSettings();
 
         // 查看提示词按钮
-        const viewPromptBtns = document.querySelectorAll('#viewPromptBtn');
+        const viewPromptBtns = document.querySelectorAll('.viewPromptBtn');
         viewPromptBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -315,7 +358,22 @@ class TranslationPanel {
      */
     _saveSettings() {
         try {
+            // 确保设置对象中包含所有必要的字段
+            if (!this.settings.apiKeys) {
+                this.settings.apiKeys = {};
+            }
+
+            // 确保百炼模型设置存在
+            if (!this.settings.bailianModel) {
+                this.settings.bailianModel = 'qwen-max';
+            }
+
+            // 保存到本地存储
             localStorage.setItem('translation-settings', JSON.stringify(this.settings));
+
+            // 同步设置到翻译服务
+            this.translationService.setSettings(this.settings);
+
             Logger.info('已保存翻译设置', this.settings);
         } catch (error) {
             Logger.error('保存翻译设置失败', error);
@@ -329,11 +387,19 @@ class TranslationPanel {
     _updateUI() {
         // 更新翻译提供者选择
         const providerSelect = document.getElementById('translationProvider');
-        if (providerSelect && this.settings.provider) {
+        if (providerSelect) {
+            // 确保有默认提供者
+            if (!this.settings.provider) {
+                this.settings.provider = 'zhipu';
+            }
+
+            // 设置下拉菜单的值
             providerSelect.value = this.settings.provider;
 
             // 显示当前提供者的设置面板
             this._showProviderSettings(this.settings.provider);
+
+            console.log(`初始化翻译提供者: ${this.settings.provider}`);
         }
 
         // 初始化所有提供者的设置
@@ -507,6 +573,9 @@ class TranslationPanel {
         const currentSettings = document.getElementById(`${providerId}Settings`);
         if (currentSettings) {
             currentSettings.style.display = 'block';
+            console.log(`显示${providerId}设置面板`);
+        } else {
+            console.error(`未找到${providerId}设置面板`);
         }
     }
 
@@ -517,7 +586,7 @@ class TranslationPanel {
      */
     _initProviderSettings(providerId) {
         // 初始化提示词ID选择
-        const customPromptSelect = document.querySelector(`#${providerId}Settings #customPromptID`);
+        const customPromptSelect = document.querySelector(`#${providerId}PromptID`);
         if (customPromptSelect) {
             // 设置初始值
             if (this.settings.customPrompt) {
@@ -531,7 +600,7 @@ class TranslationPanel {
                 this.translationService.setCustomPrompt(customPromptSelect.value);
 
                 // 显示或隐藏自定义提示模板输入框
-                const customPromptContainer = document.querySelector(`#${providerId}Settings #customPromptContainer`);
+                const customPromptContainer = document.querySelector(`#${providerId}CustomPromptContainer`);
                 if (customPromptContainer) {
                     customPromptContainer.style.display = customPromptSelect.value === 'custom' ? 'block' : 'none';
                 }
@@ -539,7 +608,7 @@ class TranslationPanel {
         }
 
         // 初始化自定义提示模板
-        const promptTemplateTextarea = document.querySelector(`#${providerId}Settings #promptTemplate`);
+        const promptTemplateTextarea = document.querySelector(`#${providerId}PromptTemplate`);
         if (promptTemplateTextarea) {
             // 设置初始值
             if (this.settings.promptTemplate) {
@@ -556,8 +625,11 @@ class TranslationPanel {
 
         // 初始化API密钥输入
         const apiKeyInput = document.querySelector(`#${providerId}Key`);
-        if (apiKeyInput && this.settings.apiKeys && this.settings.apiKeys[providerId]) {
-            apiKeyInput.value = this.settings.apiKeys[providerId];
+        if (apiKeyInput) {
+            // 如果有保存的API密钥，设置输入框的值
+            if (this.settings.apiKeys && this.settings.apiKeys[providerId]) {
+                apiKeyInput.value = this.settings.apiKeys[providerId];
+            }
 
             // 添加事件监听器
             apiKeyInput.addEventListener('input', () => {
@@ -610,16 +682,24 @@ class TranslationPanel {
                     this._saveSettings();
                 });
             }
-        } else if (providerId === 'libre') {
-            // 初始化LibreTranslate端点
-            const libreEndpointInput = document.querySelector('#libreEndpoint');
-            if (libreEndpointInput && this.settings.libreEndpoint) {
-                libreEndpointInput.value = this.settings.libreEndpoint;
+        } else if (providerId === 'bailian') {
+            const bailianModelSelect = document.querySelector('#bailianModel');
+            if (bailianModelSelect) {
+                // 如果有保存的模型设置，使用保存的设置；否则使用默认值'qwen-max'
+                const modelValue = this.settings.bailianModel || 'qwen-max';
+                bailianModelSelect.value = modelValue;
 
-                libreEndpointInput.addEventListener('input', () => {
-                    this.settings.libreEndpoint = libreEndpointInput.value;
+                // 确保设置中有bailianModel值
+                if (!this.settings.bailianModel) {
+                    this.settings.bailianModel = modelValue;
                     this._saveSettings();
-                    this.translationService.setLibreEndpoint(libreEndpointInput.value);
+                    this.translationService.setBailianModel(modelValue);
+                }
+
+                bailianModelSelect.addEventListener('change', () => {
+                    this.settings.bailianModel = bailianModelSelect.value;
+                    this._saveSettings();
+                    this.translationService.setBailianModel(bailianModelSelect.value);
                 });
             }
         }
@@ -647,11 +727,16 @@ class TranslationPanel {
 
             // 获取当前设置
             // 获取当前选择的提示词ID
-            const customPromptSelect = document.querySelector(`#${this.translationService.getId()}Settings #customPromptID`);
+            const activeProvider = this.translationService.getActiveProvider();
+            if (!activeProvider) {
+                throw new Error('未找到活动的翻译提供者');
+            }
+            const providerId = activeProvider.getId();
+            const customPromptSelect = document.querySelector(`#${providerId}PromptID`);
             const customPrompt = customPromptSelect ? customPromptSelect.value : (this.settings.customPrompt || '');
 
             // 获取自定义提示模板
-            const promptTemplateTextarea = document.querySelector(`#${this.translationService.getId()}Settings #promptTemplate`);
+            const promptTemplateTextarea = document.querySelector(`#${providerId}PromptTemplate`);
             const promptTemplate = promptTemplateTextarea ? promptTemplateTextarea.value : (this.settings.promptTemplate || '');
 
             // 获取字符限制设置
@@ -699,27 +784,7 @@ class TranslationPanel {
         }
     }
 
-    /**
-     * 显示错误消息
-     * @param {string} message - 错误消息
-     * @private
-     */
-    _showError(message) {
-        console.error('翻译面板错误:', message);
 
-        // 使用状态消息显示错误
-        const statusMessage = document.getElementById('statusMessage');
-        if (statusMessage) {
-            statusMessage.textContent = `错误: ${message}`;
-            statusMessage.className = 'status-message error';
-            statusMessage.style.display = 'block';
-
-            // 5秒后自动隐藏错误消息
-            setTimeout(() => {
-                statusMessage.style.display = 'none';
-            }, 5000);
-        }
-    }
 
 
 }

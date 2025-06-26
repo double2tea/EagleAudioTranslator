@@ -15,8 +15,12 @@ class SmartClassifier {
         this.csvMatcher = csvMatcher;
         this.nlpProcessor = null; // 自然语言处理器，用于词性分析
         this.initialized = false;
-        this.aliyunNLPAdapter = null; // 阿里云NLP服务适配器
+
         this.chineseTokenizer = null; // 中文分词器
+
+        // 词性分析缓存，避免重复计算
+        this.posAnalysisCache = new Map();
+        this.maxCacheSize = 1000; // 最大缓存条目数
 
         // 分类设置
         this.classificationSettings = {
@@ -28,23 +32,15 @@ class SmartClassifier {
                 adverb: 40,      // 副词优先级较低
                 other: 20        // 其他词性优先级最低
             },
-            // 默认匹配策略
+            // 默认匹配策略：智能自动选择
             defaultMatchStrategy: 'auto', // 'auto', 'ai', 'bilingual', 'pos'
-            // 是否启用词性分析
-            usePosAnalysis: true,
-            // 是否验证AI返回的分类
+            // 启用词性分析（提高匹配准确性）
+            usePosAnalysis: true, // 重新启用，配合其他策略
+            // 验证AI分类结果
             validateAIClassification: true,
-            // 阿里云NLP服务配置
-            aliyunNLP: {
-                enabled: false,  // 是否启用阿里云NLP服务
-                accessKeyId: '', // 阿里云AccessKey ID
-                accessKeySecret: '', // 阿里云AccessKey Secret
-                debug: false,    // 是否开启调试模式
-                tokenizer: {     // 分词器配置
-                    useBasicChinese: true,
-                    useAdvancedChinese: false,
-                    useMultiLanguage: true
-                }
+            // 本地分词配置
+            localTokenizer: {
+                debug: false    // 是否开启调试模式
             },
             // 词性过滤设置
             filterSettings: {
@@ -70,12 +66,16 @@ class SmartClassifier {
             if (typeof nlp !== 'undefined') {
                 this.nlpProcessor = nlp;
                 console.log('NLP处理器初始化成功');
+            } else {
+                console.warn('compromise.js (nlp) 未加载，英文词性分析功能将不可用');
             }
 
             // 检查segmentit分词库是否可用
             if (typeof SegmentitDirect !== 'undefined') {
                 this.chineseTokenizer = SegmentitDirect;
                 console.log('中文分词器初始化成功');
+            } else {
+                console.warn('SegmentitDirect 未加载，中文词性分析功能将受限');
             }
 
             // 检查IntlSegmenterAdapter是否可用
@@ -86,33 +86,11 @@ class SmartClassifier {
                 } catch (error) {
                     console.error('IntlSegmenterAdapter初始化失败:', error);
                 }
+            } else {
+                console.warn('IntlSegmenterAdapter 未加载，将使用浏览器内置分词功能');
             }
 
-            // 检查阿里云NLP适配器是否可用
-            if (this.classificationSettings.aliyunNLP && this.classificationSettings.aliyunNLP.enabled) {
-                try {
-                    console.log('初始化阿里云NLP适配器...');
-
-                    const options = {
-                        accessKeyId: this.classificationSettings.aliyunNLP.accessKeyId,
-                        accessKeySecret: this.classificationSettings.aliyunNLP.accessKeySecret,
-                        enabled: this.classificationSettings.aliyunNLP.enabled,
-                        debug: this.classificationSettings.aliyunNLP.debug,
-                        tokenizer: this.classificationSettings.aliyunNLP.tokenizer
-                    };
-
-                    // 使用阿里云NLP适配器
-                    if (typeof AliyunNLPAdapter !== 'undefined') {
-                        this.aliyunNLPAdapter = new AliyunNLPAdapter(options);
-                        console.log('阿里云NLP适配器初始化状态:', this.aliyunNLPAdapter.initialized);
-                    } else {
-                        console.error('未找到阿里云NLP适配器');
-                    }
-                } catch (error) {
-                    console.error('阿里云NLP适配器初始化失败:', error);
-                    this.aliyunNLPAdapter = null;
-                }
-            }
+            // 本地分词系统已就绪，无需额外初始化
 
             this.initialized = true;
             console.log('智能分类器初始化成功');
@@ -123,71 +101,63 @@ class SmartClassifier {
     }
 
     /**
+     * 重新初始化分类器（当依赖库延迟加载时使用）
+     * @returns {boolean} 是否初始化成功
+     */
+    reinitialize() {
+        console.log('重新初始化智能分类器...');
+        this.init();
+        return this.initialized;
+    }
+
+    /**
+     * 确保依赖可用，如果不可用则尝试重新初始化
+     * @returns {boolean} 依赖是否可用
+     */
+    ensureDependencies() {
+        if (!this.initialized) {
+            return this.reinitialize();
+        }
+        return true;
+    }
+
+    /**
      * 统一的分词方法，根据文本类型和可用工具选择合适的分词策略
      * @param {string} text - 要分析的文本
      * @returns {Array} 分词结果
      * @private
      */
-    async tokenizeText(text, options = {}) {
+    tokenizeText(text, options = {}) {
+        // 确保依赖可用
+        if (!this.ensureDependencies()) {
+            console.warn('【分词】依赖不可用，返回空结果');
+            return [];
+        }
+
         const result = [];
 
         // 检测文本语言
         const hasChinese = /[\u4e00-\u9fa5]/.test(text);
         const hasEnglish = /[a-zA-Z]/.test(text);
 
-        // 1. 尝试使用阿里云NLP服务
-        let aliyunSuccess = false;
-        if ((hasChinese || hasEnglish) &&
-            this.aliyunNLPAdapter &&
-            this.classificationSettings.aliyunNLP.enabled) {
+        // 使用本地分词系统处理
+        // 处理英文部分
+        if (hasEnglish && this.nlpProcessor) {
             try {
-                // 确保适配器已初始化
-                if (!this.aliyunNLPAdapter.initialized && typeof this.aliyunNLPAdapter.init === 'function') {
-                    await this.aliyunNLPAdapter.init();
-                }
+                // 提取英文部分 - 优化性能，使用正则表达式一次性处理
+                let englishText = text
+                    .replace(/[\u4e00-\u9fa5]/g, ' ')  // 将中文字符替换为空格
+                    .replace(/_/g, ' ')               // 将下划线替换为空格
+                    .replace(/\s+/g, ' ')             // 规范化空格
+                    .trim();
 
-                // 使用阿里云NLP服务进行词性分析
-                const posResult = await this.aliyunNLPAdapter.analyzePos(text);
-                if (posResult && posResult.length > 0) {
-                    result.push(...posResult);
-                    aliyunSuccess = true;
-                } else {
-                    // 阿里云NLP返回空结果，可能是纯英文文本或其他原因
-                    if (this.classificationSettings.aliyunNLP.debug) {
-                        console.log(`【分词】阿里云NLP服务返回空结果，将使用本地处理`);
-                    }
-                }
-            } catch (error) {
-                if (this.classificationSettings.aliyunNLP.debug) {
-                    console.warn(`【分词】阿里云NLP服务分词失败: ${error.message}`);
-                } else {
-                    console.warn(`【分词】阿里云NLP服务分词失败`);
-                }
-            }
-        }
+                if (englishText.trim().length > 0) {
+                    console.log(`【分词】使用本地compromise.js处理英文文本: "${englishText}"`);
 
-        // 2. 如果阿里云NLP服务失败或未启用，使用本地处理
-        if (!aliyunSuccess) {
-            // 处理英文部分
-            if (hasEnglish && this.nlpProcessor) {
-                try {
-                    // 提取英文部分
-                    let englishText = '';
-                    for (let i = 0; i < text.length; i++) {
-                        if (/[a-zA-Z0-9\s\p{P}]/u.test(text[i]) && !/[\u4e00-\u9fa5]/u.test(text[i])) {
-                            englishText += text[i];
-                        }
-                    }
+                    // 使用compromise.js进行更详细的分析
+                    const doc = this.nlpProcessor(englishText);
 
-                    // 预处理英文文本，将下划线替换为空格
-                    englishText = englishText.replace(/_/g, ' ');
-
-                    if (englishText.trim().length > 0) {
-                        if (this.classificationSettings.aliyunNLP.debug) {
-                            console.log(`【分词】使用本地compromise.js处理英文文本: "${englishText}"`);
-                        }
-
-                        const doc = this.nlpProcessor(englishText);
+                        // 获取所有术语
                         const allTerms = doc.terms();
 
                         // 定义要提取的词性及其权重
@@ -198,6 +168,29 @@ class SmartClassifier {
                             { type: '#Adverb', filter: '', pos: 'adverb' }
                         ];
 
+                        // 获取句子结构信息，用于更好地理解文本
+                        const sentences = doc.sentences();
+                        if (this.classificationSettings.localTokenizer.debug && sentences.length > 0) {
+                            console.log(`【分词】文本包含 ${sentences.length} 个句子`);
+
+                            // 分析每个句子的结构
+                            sentences.forEach((sentence, idx) => {
+                                try {
+                                    // 获取主语和谓语
+                                    const subjects = sentence.match('#Subject').out('array');
+                                    const verbs = sentence.match('#Verb').out('array');
+
+                                    if (subjects.length > 0 || verbs.length > 0) {
+                                        console.log(`【分词】句子${idx+1}结构: 主语=[${subjects.join(', ')}], 谓语=[${verbs.join(', ')}]`);
+                                    }
+                                } catch (e) {
+                                    if (this.classificationSettings.localTokenizer.debug) {
+                                        console.warn(`【分词】句子分析失败: ${e.message}`, { sentence: sentence.text(), error: e });
+                                    }
+                                }
+                            });
+                        }
+
                         // 统一处理各种词性
                         for (const posType of posTypes) {
                             try {
@@ -205,39 +198,70 @@ class SmartClassifier {
                                 const matchExpr = posType.type + (posType.filter || '');
                                 const words = allTerms.match(matchExpr).out('array');
 
+                                // 记录找到的词数量
+                                if (this.classificationSettings.localTokenizer.debug && words.length > 0) {
+                                    console.log(`【分词】找到 ${words.length} 个${posType.pos}词: ${words.join(', ')}`);
+                                }
+
                                 words.forEach(word => {
                                     if (word && word.trim() && !SmartClassifier.ENGLISH_STOP_WORDS.has(word.toLowerCase())) {
+                                        // 获取词的原形(lemma)，如running -> run
+                                        let lemma = word.toLowerCase().trim();
+                                        try {
+                                            const wordDoc = this.nlpProcessor(word);
+                                            const lemmas = wordDoc.verbs().toInfinitive().out('array');
+                                            if (lemmas.length > 0 && posType.pos === 'verb') {
+                                                lemma = lemmas[0].toLowerCase();
+                                            }
+                                        } catch (e) {
+                                            if (this.classificationSettings.localTokenizer.debug) {
+                                                console.warn(`【分词】词形还原失败: ${e.message}`, { word, error: e });
+                                            }
+                                        }
+
                                         const wordObj = {
-                                            word: word.toLowerCase().trim(),
+                                            word: lemma,
+                                            originalWord: word.toLowerCase().trim(),
                                             pos: posType.pos,
                                             weight: this.classificationSettings.posWeights[posType.pos]
                                         };
 
-                                        if (this.classificationSettings.aliyunNLP.debug) {
-                                            console.log(`【分词】compromise.js识别词 "${word}" 的词性: ${posType.pos}, 权重: ${this.classificationSettings.posWeights[posType.pos]}`);
+                                        if (this.classificationSettings.localTokenizer.debug) {
+                                            const lemmaInfo = lemma !== word.toLowerCase().trim() ? ` (原形: ${lemma})` : '';
+                                            console.log(`【分词】compromise.js识别词 "${word}"${lemmaInfo} 的词性: ${posType.pos}, 权重: ${this.classificationSettings.posWeights[posType.pos]}`);
                                         }
 
                                         result.push(wordObj);
                                     }
                                 });
-                            } catch (e) { /* 忽略错误 */ }
+                            } catch (e) {
+                                if (this.classificationSettings.localTokenizer.debug) {
+                                    console.warn(`【分词】处理${posType.pos}词性时出错:`, e.message);
+                                }
+                            }
                         }
                     }
-                } catch (error) {
-                    console.warn(`【分词】英文分词失败`);
-                }
+            } catch (error) {
+                console.warn(`【分词】英文分词失败: ${error.message}`, { text, error });
             }
+        }
 
-            // 处理中文部分
-            if (hasChinese) {
-                try {
-                    // 定义词性映射函数
+        // 处理中文部分
+        if (hasChinese) {
+            try {
+                    // 定义词性映射函数 - 使用配置中的权重保持一致性
                     const mapPosTag = (posTag) => {
-                        if (posTag === 'a') return { pos: 'adjective', weight: 80 };
-                        if (posTag === 'v') return { pos: 'verb', weight: 100 };
-                        if (posTag === 'd') return { pos: 'adverb', weight: 60 };
-                        if (posTag === 'n' || posTag === 'nr' || posTag === 'ns' || posTag === 'nt') return { pos: 'noun', weight: 120 };
-                        return { pos: 'noun', weight: 120 }; // 默认为名词
+                        const posMap = {
+                            'a': 'adjective',
+                            'v': 'verb',
+                            'd': 'adverb',
+                            'n': 'noun', 'nr': 'noun', 'ns': 'noun', 'nt': 'noun'
+                        };
+                        const pos = posMap[posTag] || 'noun';
+                        return {
+                            pos: pos,
+                            weight: this.classificationSettings.posWeights[pos] || this.classificationSettings.posWeights.noun
+                        };
                     };
 
                     // 尝试使用Intl.Segmenter
@@ -257,7 +281,11 @@ class SmartClassifier {
                                         if (tagResult && tagResult.length > 0 && tagResult[0].p) {
                                             posInfo = mapPosTag(tagResult[0].p);
                                         }
-                                    } catch (e) { /* 忽略错误 */ }
+                                    } catch (e) {
+                                            if (this.classificationSettings.localTokenizer.debug) {
+                                                console.warn(`【分词】获取中文词性失败: ${e.message}`, { word, error: e });
+                                            }
+                                        }
                                 }
 
                                 result.push({
@@ -300,9 +328,8 @@ class SmartClassifier {
                         }
                     }
                 } catch (error) {
-                    console.warn(`【分词】中文分词失败`);
+                    console.warn(`【分词】中文分词失败: ${error.message}`, { text, error });
                 }
-            }
         }
 
         // 3. 去除重复项
@@ -365,46 +392,129 @@ class SmartClassifier {
     }
 
     /**
-     * 分析文本中的词性 - 简化版，使用统一的分词方法
-     * @param {string} text - 要分析的文本
-     * @returns {Promise<Array<Object>>} 词性分析结果
+     * 清理词性分析缓存
      */
-    async analyzePos(text) {
-        if (!text) return [];
-        return this.tokenizeText(text);
+    clearPosAnalysisCache() {
+        this.posAnalysisCache.clear();
+        console.log('【缓存】词性分析缓存已清理');
     }
 
     /**
-     * 处理AI分类结果
-     * @param {Object} aiClassification - AI分类结果
-     * @param {string} filename - 文件名
+     * 分析文本中的词性 - 增强版，使用统一的分词方法并提供详细日志
+     * @param {string} text - 要分析的文本
+     * @returns {Array<Object>} 词性分析结果
+     */
+    analyzePos(text) {
+        if (!text) return [];
+
+        // 检查缓存
+        if (this.posAnalysisCache.has(text)) {
+            console.log(`【词性分析】使用缓存结果: "${text}"`);
+            return this.posAnalysisCache.get(text);
+        }
+
+        // 检测文本语言
+        const hasChinese = /[\u4e00-\u9fa5]/.test(text);
+        const hasEnglish = /[a-zA-Z]/.test(text);
+
+        console.log(`【词性分析】开始分析文本: "${text}"`);
+        console.log(`【词性分析】文本语言: ${hasChinese ? '包含中文' : ''}${hasChinese && hasEnglish ? '，' : ''}${hasEnglish ? '包含英文' : ''}`);
+
+        // 使用tokenizeText进行分词和词性分析
+        const result = this.tokenizeText(text);
+
+        // 缓存结果
+        if (this.posAnalysisCache.size >= this.maxCacheSize) {
+            // 如果缓存已满，删除最旧的条目
+            const firstKey = this.posAnalysisCache.keys().next().value;
+            this.posAnalysisCache.delete(firstKey);
+        }
+        this.posAnalysisCache.set(text, result);
+
+        // 输出词性分析结果统计
+        if (result.length > 0) {
+            // 按词性统计
+            const posCounts = {};
+            result.forEach(item => {
+                posCounts[item.pos] = (posCounts[item.pos] || 0) + 1;
+            });
+
+            // 构建词性统计信息
+            const posStats = Object.entries(posCounts)
+                .map(([pos, count]) => `${pos}(${count})`)
+                .join(', ');
+
+            console.log(`【词性分析】分析结果: 共 ${result.length} 个词，词性分布: ${posStats}`);
+
+            // 输出高权重词汇
+            const highWeightWords = result
+                .filter(item => item.weight >= 100)
+                .map(item => `${item.word}(${item.pos}:${item.weight})`)
+                .join(', ');
+
+            if (highWeightWords) {
+                console.log(`【词性分析】高权重词汇: ${highWeightWords}`);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 处理AI分类结果（支持多分类选项）
+     * @param {Object} aiResult - AI分类结果（可能包含多个选项）
+     * @param {string} [filename] - 文件名（可选，用于调试）
      * @returns {Object|null} 处理后的分类结果
      */
-    processAIClassification(aiClassification, filename) {
-        if (!aiClassification || !aiClassification.catID) {
+    processAIClassification(aiResult, filename) {
+        if (!aiResult) {
+            if (this.classificationSettings.localTokenizer.debug && filename) {
+                console.log(`【AI分类】处理失败，文件名: "${filename}"，AI分类结果无效`);
+            }
+            return null;
+        }
+
+        let classificationsToTry = [];
+
+        // 处理多分类选项格式
+        if (aiResult.classifications && Array.isArray(aiResult.classifications)) {
+            classificationsToTry = aiResult.classifications.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+        }
+        // 兼容旧的单分类格式
+        else if (aiResult.catID) {
+            classificationsToTry = [aiResult];
+        }
+        else {
             return null;
         }
 
         // 如果需要验证AI返回的分类
         if (this.classificationSettings.validateAIClassification) {
-            // 查找对应的术语
-            const term = this.csvMatcher.findTermByCatID(aiClassification.catID);
-            if (term) {
-                return {
-                    catID: term.catID,
-                    catShort: term.catShort,
-                    category: term.category,
-                    category_zh: term.categoryNameZh,
-                    subCategory: term.source,
-                    subCategory_zh: term.target
-                };
-            } else {
-                return null;
+            // 直接使用第一个分类选项（已在file-processor中验证过）
+            const classification = classificationsToTry[0];
+            if (classification && classification.catID) {
+                // 查找对应的术语以获取完整信息
+                const term = this.csvMatcher.findTermByCatID(classification.catID);
+                if (term) {
+                    return {
+                        catID: term.catID,
+                        catShort: term.catShort,
+                        category: term.category,
+                        category_zh: term.categoryNameZh,
+                        subCategory: term.source,
+                        subCategory_zh: term.target,
+                        // 保留AI提供的额外信息
+                        englishDescription: classification.englishDescription,
+                        confidence: classification.confidence
+                    };
+                }
             }
+
+            return null;
         }
 
-        // 如果不需要验证，直接返回AI分类结果
-        return aiClassification;
+        // 如果不需要验证，返回第一个分类结果
+        return classificationsToTry[0] || null;
     }
 
     /**
@@ -431,12 +541,12 @@ class SmartClassifier {
         }
 
         // 2. 分析原始文件名的词性
-        const originalPosAnalysis = await this.analyzePos(filename);
+        const originalPosAnalysis = this.analyzePos(filename);
 
         // 3. 如果提供了翻译文本，分析其词性
         let translatedPosAnalysis = null;
         if (options.translatedText) {
-            translatedPosAnalysis = await this.analyzePos(options.translatedText);
+            translatedPosAnalysis = this.analyzePos(options.translatedText);
         }
 
         // 4. 准备匹配选项
@@ -453,20 +563,17 @@ class SmartClassifier {
         }
 
         // 6. 获取所有匹配结果（用于UI显示）
+        let allMatches = [];
         try {
             if (this.csvMatcher) {
-                const allMatches = this.csvMatcher.getAllMatches(
+                allMatches = this.csvMatcher.getAllMatches(
                     filename,
                     originalPosAnalysis,
                     matchOptions
                 );
-
-                // 保存匹配结果到选项中，以便调用者可以访问
-                options.matchResults = allMatches;
-                options.availableMatchCount = allMatches.length;
             }
         } catch (error) {
-            console.warn(`获取匹配结果失败`);
+            console.warn(`获取匹配结果失败: ${error.message}`, { filename, error });
         }
 
         // 7. 使用匹配器的identifyCategory方法进行匹配
@@ -484,13 +591,13 @@ class SmartClassifier {
                         category_zh: term.categoryNameZh,
                         subCategory: term.source,
                         subCategory_zh: term.target,
-                        matchResults: options.matchResults, // 添加所有匹配结果
-                        availableMatchCount: options.availableMatchCount // 添加可用匹配结果数量
+                        matchResults: allMatches, // 添加所有匹配结果
+                        availableMatchCount: allMatches.length // 添加可用匹配结果数量
                     };
                 }
             }
         } catch (error) {
-            console.error('匹配失败');
+            console.error(`匹配失败: ${error.message}`, { filename, error });
         }
 
         // 8. 如果所有匹配都失败，尝试使用文件名的第一部分（如果有空格）
@@ -499,7 +606,7 @@ class SmartClassifier {
                 const firstPart = filename.split(' ')[0];
 
                 // 分析第一部分的词性
-                const firstPartPosAnalysis = await this.analyzePos(firstPart);
+                const firstPartPosAnalysis = this.analyzePos(firstPart);
 
                 // 使用第一部分进行匹配
                 const firstPartCatID = await this.csvMatcher.identifyCategory(firstPart, null, firstPartPosAnalysis, {
@@ -528,112 +635,51 @@ class SmartClassifier {
                     }
                 }
             } catch (error) {
-                // 忽略错误
+                if (this.classificationSettings.localTokenizer.debug) {
+                    console.warn(`【分类】使用文件名第一部分匹配失败: ${error.message}`, { filename, firstPart, error });
+                }
             }
         }
 
         // 9. 如果所有匹配都失败，返回null
         return null;
     }
+
     /**
-     * 设置阿里云NLP服务配置
-     * @param {Object} config - 配置选项
-     * @param {boolean} config.enabled - 是否启用阿里云NLP服务
-     * @param {string} config.accessKeyId - 阿里云AccessKey ID
-     * @param {string} config.accessKeySecret - 阿里云AccessKey Secret
-     * @param {boolean} config.debug - 是否开启调试模式
-     * @param {Object} config.tokenizer - 分词器配置
-     * @param {Object} config.filterSettings - 词性过滤设置
-     * @returns {boolean} 设置是否成功
+     * 获取分类器状态信息，用于调试
+     * @returns {Object} 状态信息
      */
-    setAliyunNLPConfig(config) {
-        try {
-            // 更新配置
-            this.classificationSettings.aliyunNLP = Object.assign(
-                this.classificationSettings.aliyunNLP || {},
-                config
-            );
-
-            // 更新过滤设置
-            if (config.filterSettings) {
-                this.classificationSettings.filterSettings = Object.assign(
-                    this.classificationSettings.filterSettings || {},
-                    config.filterSettings
-                );
+    getStatus() {
+        return {
+            initialized: this.initialized,
+            dependencies: {
+                nlpProcessor: !!this.nlpProcessor,
+                chineseTokenizer: !!this.chineseTokenizer,
+                nlpAdapter: !!this.nlpAdapter,
+                csvMatcher: !!this.csvMatcher
+            },
+            cache: {
+                size: this.posAnalysisCache.size,
+                maxSize: this.maxCacheSize
+            },
+            settings: {
+                defaultMatchStrategy: this.classificationSettings.defaultMatchStrategy,
+                usePosAnalysis: this.classificationSettings.usePosAnalysis,
+                validateAIClassification: this.classificationSettings.validateAIClassification,
+                debugMode: this.classificationSettings.localTokenizer.debug
             }
-
-            // 如果已经初始化了适配器，更新适配器配置
-            if (this.aliyunNLPAdapter) {
-                const options = {
-                    accessKeyId: this.classificationSettings.aliyunNLP.accessKeyId,
-                    accessKeySecret: this.classificationSettings.aliyunNLP.accessKeySecret,
-                    enabled: this.classificationSettings.aliyunNLP.enabled,
-                    debug: this.classificationSettings.aliyunNLP.debug,
-                    // 添加分词器配置
-                    tokenizer: this.classificationSettings.aliyunNLP.tokenizer
-                };
-
-                this.aliyunNLPAdapter.setOptions(options);
-
-                // 重新初始化适配器
-                if (typeof this.aliyunNLPAdapter.init === 'function') {
-                    this.aliyunNLPAdapter.init();
-                }
-            } else {
-                // 尝试初始化适配器
-                try {
-                    const options = {
-                        accessKeyId: this.classificationSettings.aliyunNLP.accessKeyId,
-                        accessKeySecret: this.classificationSettings.aliyunNLP.accessKeySecret,
-                        enabled: this.classificationSettings.aliyunNLP.enabled,
-                        debug: this.classificationSettings.aliyunNLP.debug,
-                        // 添加分词器配置
-                        tokenizer: this.classificationSettings.aliyunNLP.tokenizer
-                    };
-
-                    // 使用阿里云NLP适配器
-                    if (typeof AliyunNLPAdapter !== 'undefined') {
-                        this.aliyunNLPAdapter = new AliyunNLPAdapter(options);
-                    }
-                    else {
-                        this.aliyunNLPAdapter = null;
-                        return false;
-                    }
-                } catch (error) {
-                    this.aliyunNLPAdapter = null;
-                    return false;
-                }
-            }
-
-            return true;
-        } catch (error) {
-            return false;
-        }
+        };
     }
 
     /**
-     * 获取阿里云NLP服务配置
-     * @returns {Object} 当前配置
+     * 设置调试模式
+     * @param {boolean} enabled - 是否启用调试模式
      */
-    getAliyunNLPConfig() {
-        // 返回配置的副本，隐藏敏感信息
-        const config = Object.assign({}, this.classificationSettings.aliyunNLP);
-        if (config.accessKeyId) {
-            config.accessKeyId = config.accessKeyId.substring(0, 3) + '***';
-        }
-        if (config.accessKeySecret) {
-            config.accessKeySecret = '******';
-        }
-
-        // 添加服务状态信息
-        config.isAvailable = this.aliyunNLPAdapter ? this.aliyunNLPAdapter.isAvailable() : false;
-
-        if (this.aliyunNLPAdapter) {
-            config.requestStats = this.aliyunNLPAdapter.getRequestStats();
-        }
-
-        return config;
+    setDebugMode(enabled) {
+        this.classificationSettings.localTokenizer.debug = enabled;
+        console.log(`【设置】调试模式已${enabled ? '启用' : '禁用'}`);
     }
+
 }
 
 // 导出类

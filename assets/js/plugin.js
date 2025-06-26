@@ -21,21 +21,75 @@ eagle.onPluginCreate((plugin) => {
         `;
     }
 
-    // 初始化插件
-    if (typeof initPlugin === 'function') {
-        initPlugin();
-    } else {
-        console.error('initPlugin函数未定义，可能是脚本加载顺序问题');
-        // 尝试延迟初始化
-        setTimeout(() => {
-            if (typeof initPlugin === 'function') {
-                console.log('延迟初始化插件');
-                initPlugin();
-            } else {
-                console.error('延迟初始化失败，initPlugin函数仍未定义');
-            }
-        }, 500);
+    // 等待DOM加载完成后再初始化插件
+    function tryInitPlugin() {
+        console.log('Eagle插件创建事件触发，准备初始化插件');
+
+        // 检查DOM是否已加载
+        if (document.readyState === 'loading') {
+            console.log('DOM尚未加载完成，等待DOMContentLoaded事件');
+            document.addEventListener('DOMContentLoaded', () => {
+                console.log('DOM加载完成，开始初始化插件');
+                performInitialization();
+            });
+        } else {
+            console.log('DOM已加载完成，直接初始化插件');
+            performInitialization();
+        }
     }
+
+    function performInitialization() {
+        // 尝试初始化插件，如果失败则重试几次
+        let attempts = 0;
+        const maxAttempts = 5;
+
+        function attemptInit() {
+            attempts++;
+            console.log(`尝试初始化插件 (第${attempts}次)`);
+
+            if (typeof updateLoadingStatus === 'function') {
+                updateLoadingStatus(`正在检查环境... (第${attempts}次尝试)`);
+            }
+
+            // 检查依赖项
+            if (typeof initPlugin === 'function' && typeof checkDependencies === 'function' && checkDependencies()) {
+                console.log('所有依赖项已就绪，开始初始化插件');
+                if (typeof updateLoadingStatus === 'function') {
+                    updateLoadingStatus('环境检查完成，开始初始化插件');
+                }
+                initPlugin();
+                return true;
+            } else {
+                console.warn(`依赖项未就绪 (第${attempts}次尝试)`);
+
+                // 检查缺失的依赖项
+                const missingDeps = [];
+                if (typeof initPlugin !== 'function') missingDeps.push('initPlugin');
+                if (typeof checkDependencies !== 'function') missingDeps.push('checkDependencies');
+
+                if (typeof updateLoadingStatus === 'function') {
+                    updateLoadingStatus(`等待缺失的组件: ${missingDeps.join(', ')}`);
+                }
+
+                if (attempts < maxAttempts) {
+                    // 等待一段时间后重试
+                    setTimeout(attemptInit, 500 * attempts);
+                } else {
+                    console.error(`已尝试${maxAttempts}次初始化插件，但仍然失败`);
+                    if (typeof showLoadingError === 'function') {
+                        showLoadingError(`插件初始化失败，缺失组件: ${missingDeps.join(', ')}。请刷新页面或重启 Eagle 后重试。`);
+                    }
+                }
+                return false;
+            }
+        }
+
+        // 开始尝试初始化
+        attemptInit();
+    }
+
+    // 开始初始化流程
+    tryInitPlugin();
 });
 
 // 插件运行事件
@@ -47,9 +101,16 @@ eagle.onPluginRun(() => {
 eagle.onPluginShow(() => {
     console.log('eagle.onPluginShow');
 
-    // 确保插件显示时初始化
-    if (typeof initPlugin === 'function' && (!window.pluginState || !window.pluginState.initialized)) {
-        initPlugin();
+    // 插件显示时检查是否已初始化，如果没有则尝试初始化
+    if (!window.pluginState || !window.pluginState.initialized) {
+        console.log('插件显示时发现未初始化，尝试初始化');
+        if (typeof initPlugin === 'function') {
+            initPlugin();
+        } else {
+            console.warn('插件显示时initPlugin函数不可用');
+        }
+    } else {
+        console.log('插件已初始化，无需重复初始化');
     }
 });
 

@@ -130,7 +130,6 @@ class Logger {
      */
     static clearLogs() {
         Logger.logs = [];
-        console.log('日志已清除');
     }
 }
 

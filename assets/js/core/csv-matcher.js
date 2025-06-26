@@ -38,8 +38,8 @@ class CSVMatcher {
 
         // 确保路径有效
         if (!csvPath) {
-            console.warn('CSV路径为空，使用默认路径 ./assets/data/categorylist.csv');
-            csvPath = './assets/data/categorylist.csv';
+            console.warn('CSV路径为空，使用默认路径 ./assets/data/UCSv8.2.1.csv');
+            csvPath = './assets/data/UCSv8.2.1.csv';
         }
 
         // 加载CSV数据
@@ -367,18 +367,15 @@ class CSVMatcher {
     findMatch(text, posAnalysis = null, options = {}) {
         // 验证输入
         if (!this.loaded || !text) {
-            console.log('查找匹配: 输入无效');
             return null;
         }
 
-        // 兼容测试环境，检查Logger是否存在
+        // 记录匹配开始
         if (typeof Logger !== 'undefined') {
             Logger.debug(`[匹配引擎] 开始查找匹配: "${text}"`, {
                 词性分析: posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0,
                 选项: options ? Object.keys(options).join(', ') : '无'
             });
-        } else {
-            console.debug(`[匹配引擎] 开始查找匹配: "${text}"`);
         }
 
         // 检测是否为中文文本
@@ -1329,9 +1326,9 @@ class CSVMatcher {
             选项: options ? Object.keys(options).join(', ') : '无'
         });
 
-        // 定义匹配策略优先级
+        // 恢复完整匹配策略 - 保持高效的同时确保覆盖率
         const matchStrategies = [
-            // 1. AI辅助分类 - 如果启用了AI辅助分类并且提供了翻译服务
+            // 1. AI智能分类 - 主要策略，利用大模型强大的理解能力
             async () => {
                 if (this.matchSettings.useAIClassification && this.aiClassifier && translationProvider) {
                     try {
@@ -1339,25 +1336,25 @@ class CSVMatcher {
                         if (aiClassification && aiClassification.catID) {
                             // 兼容测试环境，检查Logger是否存在
                             if (typeof Logger !== 'undefined') {
-                                Logger.info(`[匹配引擎] 策略 1/6 - AI辅助分类成功: "${text}" -> ${aiClassification.catID}`);
+                                Logger.info(`[匹配引擎] 策略 1/6 - AI智能分类成功: "${text}" -> ${aiClassification.catID} (置信度: ${aiClassification.confidence || 'N/A'})`);
                             } else {
-                                console.info(`[匹配引擎] 策略 1/6 - AI辅助分类成功: "${text}" -> ${aiClassification.catID}`);
+                                console.info(`[匹配引擎] 策略 1/6 - AI智能分类成功: "${text}" -> ${aiClassification.catID} (置信度: ${aiClassification.confidence || 'N/A'})`);
                             }
                             return aiClassification.catID;
                         }
                     } catch (error) {
                         // 兼容测试环境，检查Logger是否存在
                         if (typeof Logger !== 'undefined') {
-                            Logger.error(`[匹配引擎] 策略 1/6 - AI辅助分类失败: ${error.message || error}`);
+                            Logger.warn(`[匹配引擎] AI智能分类失败: ${error.message || error}`);
                         } else {
-                            console.error(`[匹配引擎] 策略 1/6 - AI辅助分类失败: ${error.message || error}`);
+                            console.warn(`[匹配引擎] AI智能分类失败: ${error.message || error}`);
                         }
                     }
                 }
                 return null;
             },
 
-            // 2. 双语匹配 - 如果提供了翻译文本
+            // 2. 双语匹配 - 对中文文件至关重要
             async () => {
                 if (options && options.translatedText) {
                     // 使用增强的双语匹配方法
@@ -1389,7 +1386,7 @@ class CSVMatcher {
                 return null;
             },
 
-            // 3. 基于词性分析的匹配 - 如果提供了词性分析结果
+            // 3. 词性分析匹配 - 智能语言理解
             async () => {
                 if (posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0) {
                     // 使用增强的findMatch方法
@@ -1413,7 +1410,7 @@ class CSVMatcher {
                 return null;
             },
 
-            // 4. 基于翻译文本的匹配 - 如果提供了翻译文本
+            // 4. 翻译文本匹配 - 专门处理翻译结果
             async () => {
                 if (options && options.translatedText) {
                     // 使用翻译文本进行匹配
@@ -1436,7 +1433,7 @@ class CSVMatcher {
                 return null;
             },
 
-            // 5. 基于原始文本的匹配 - 最后的备选方案
+            // 5. 原始文本匹配 - 基础保障
             async () => {
                 // 使用原始文本进行匹配
                 const match = this.findMatch(text, null, options);
@@ -1452,59 +1449,23 @@ class CSVMatcher {
                 return null;
             },
 
-            // 6. 直接匹配分类 - 如果文本是单词
+            // 6. 模糊匹配 - 最后的保障策略
             async () => {
-                // 如果文本是单词，尝试直接匹配分类
-                if (text.indexOf(' ') === -1) {
-                    const lowerText = text.toLowerCase();
-                    const categoryMatches = [];
-
-                    // 完全匹配
-                    for (let i = 0; i < this.terms.length; i++) {
-                        if (this.terms[i].source.toLowerCase() === lowerText) {
-                            categoryMatches.push({
-                                category: this.terms[i].category || this.terms[i].source,
-                                score: this.matchSettings.priorityWeights.exactMatch,
-                                matchType: 'category_exact'
-                            });
+                // 使用Fuse.js进行模糊匹配
+                if (this.fuseInstance) {
+                    const fuseResults = this.fuseInstance.search(text);
+                    if (fuseResults && fuseResults.length > 0) {
+                        const bestMatch = fuseResults[0];
+                        // 调整阈值，提高覆盖率
+                        if (bestMatch.score < 0.7) { // Fuse.js分数越低越好，放宽阈值
+                            // 兼容测试环境，检查Logger是否存在
+                            if (typeof Logger !== 'undefined') {
+                                Logger.info(`[匹配引擎] 策略 6/6 - 模糊匹配成功: "${text}" -> ${bestMatch.item.catID} (分数: ${bestMatch.score.toFixed(3)})`);
+                            } else {
+                                console.info(`[匹配引擎] 策略 6/6 - 模糊匹配成功: "${text}" -> ${bestMatch.item.catID} (分数: ${bestMatch.score.toFixed(3)})`);
+                            }
+                            return bestMatch.item.catID;
                         }
-                    }
-
-                    // 开头匹配
-                    for (let j = 0; j < this.terms.length; j++) {
-                        const termSource = this.terms[j].source.toLowerCase();
-                        if (lowerText.startsWith(termSource) && termSource !== lowerText) {
-                            categoryMatches.push({
-                                category: this.terms[j].category || this.terms[j].source,
-                                score: (termSource.length / lowerText.length) * this.matchSettings.priorityWeights.partialMatch,
-                                matchType: 'category_starts_with'
-                            });
-                        }
-                    }
-
-                    // 包含匹配
-                    for (let k = 0; k < this.terms.length; k++) {
-                        const termSource = this.terms[k].source.toLowerCase();
-                        if (lowerText.includes(termSource) && !lowerText.startsWith(termSource) && termSource !== lowerText) {
-                            categoryMatches.push({
-                                category: this.terms[k].category || this.terms[k].source,
-                                score: (termSource.length / lowerText.length) * this.matchSettings.priorityWeights.containsMatch / 2,
-                                matchType: 'category_contains'
-                            });
-                        }
-                    }
-
-                    // 如果有匹配结果，按分数排序并返回最高分数的分类
-                    if (categoryMatches.length > 0) {
-                        categoryMatches.sort((a, b) => b.score - a.score);
-                        const bestCategoryMatch = categoryMatches[0];
-                        // 兼容测试环境，检查Logger是否存在
-                        if (typeof Logger !== 'undefined') {
-                            Logger.info(`[匹配引擎] 策略 6/6 - 直接匹配分类成功: "${text}" -> ${bestCategoryMatch.category} (匹配类型: ${bestCategoryMatch.matchType}, 分数: ${bestCategoryMatch.score.toFixed(2)})`);
-                        } else {
-                            console.info(`[匹配引擎] 策略 6/6 - 直接匹配分类成功: "${text}" -> ${bestCategoryMatch.category} (匹配类型: ${bestCategoryMatch.matchType}, 分数: ${bestCategoryMatch.score.toFixed(2)})`);
-                        }
-                        return bestCategoryMatch.category;
                     }
                 }
                 return null;

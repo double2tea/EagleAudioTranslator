@@ -82,13 +82,10 @@ class NamingUtils {
      */
     static applyNamingStyle(text, style, customSeparator = '_') {
         if (!text) return '';
-        
-        // 先清理文本，确保正确分割单词
-        const cleanText = text.replace(/\s+/g, ' ').trim();
-        
-        // 分割单词
-        const words = cleanText.split(/\s+/);
-        
+
+        // 智能分割单词：支持空格、驼峰命名、下划线、连字符等格式
+        const words = this._splitIntoWords(text);
+
         switch (style) {
             case 'camelCase':
                 return words.map((word, index) => {
@@ -97,26 +94,58 @@ class NamingUtils {
                     }
                     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
                 }).join('');
-                
+
             case 'PascalCase':
                 return words.map(word => {
                     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
                 }).join('');
-                
+
             case 'snake_case':
                 return words.map(word => word.toLowerCase()).join('_');
-                
+
             case 'kebab-case':
                 return words.map(word => word.toLowerCase()).join('-');
-                
+
             case 'custom':
                 return words.join(customSeparator);
-                
+
             case 'none':
             default:
-                // 如果没有指定命名风格，返回原始文本
-                return cleanText;
+                // 如果没有指定命名风格，返回清理后的文本
+                return text.replace(/\s+/g, ' ').trim();
         }
+    }
+
+    /**
+     * 智能分割文本为单词数组
+     * 支持多种格式：空格分隔、驼峰命名、下划线、连字符等
+     * @param {string} text - 要分割的文本
+     * @returns {Array<string>} 单词数组
+     * @private
+     */
+    static _splitIntoWords(text) {
+        if (!text) return [];
+
+        // 先处理明显的分隔符（空格、下划线、连字符）
+        let processedText = text
+            .replace(/[\s_-]+/g, ' ')  // 将空格、下划线、连字符替换为空格
+            .trim();
+
+        // 如果有空格，直接按空格分割
+        if (processedText.includes(' ')) {
+            return processedText.split(/\s+/).filter(word => word.length > 0);
+        }
+
+        // 处理驼峰命名：在大写字母前插入空格
+        // 例如：KnifeCuttingSound -> Knife Cutting Sound
+        processedText = processedText.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+        // 处理连续大写字母：在最后一个大写字母前插入空格
+        // 例如：XMLHttpRequest -> XML Http Request
+        processedText = processedText.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+
+        // 按空格分割并过滤空字符串
+        return processedText.split(/\s+/).filter(word => word.length > 0);
     }
 
     /**

@@ -27,6 +27,9 @@ class FuseMatcher {
             matchStrategy: 'auto'
         };
 
+        // 初始化匹配策略配置
+        this.initMatchingStrategyConfig();
+
         // 默认 Fuse.js 选项
         this.fuseOptions = {
             // 搜索键 - 使用平衡的权重设置
@@ -177,6 +180,57 @@ class FuseMatcher {
     }
 
     /**
+     * 初始化匹配策略配置
+     */
+    initMatchingStrategyConfig() {
+        try {
+            // 检查是否已经有MatchingStrategyConfig类
+            if (typeof window.MatchingStrategyConfig === 'function') {
+                // 从本地存储加载配置或使用默认配置
+                this.matchingStrategyConfig = window.MatchingStrategyConfig.loadFromLocalStorage();
+            } else {
+                // 如果类不存在，创建一个简单的默认配置
+                console.warn('MatchingStrategyConfig类不可用，使用内置默认配置');
+                this.matchingStrategyConfig = {
+                    strategies: {
+                        nounDirectMatch: { enabled: true, priority: 1, threshold: 0.1 },
+                        enhancedTextMatch: { enabled: true, priority: 2, threshold: 0.2 },
+                        originalTextMatch: { enabled: true, priority: 3, threshold: 0.2 },
+                        bilingualTextMatch: { enabled: true, priority: 4, threshold: 50 }
+                    },
+                    getEnabledStrategies: function() {
+                        return Object.entries(this.strategies)
+                            .filter(([_, strategy]) => strategy.enabled)
+                            .sort((a, b) => a[1].priority - b[1].priority)
+                            .map(([key, strategy]) => ({ key, ...strategy }));
+                    }
+                };
+            }
+
+            // 将配置添加到全局状态
+            if (window.pluginState) {
+                window.pluginState.matchingStrategyConfig = this.matchingStrategyConfig;
+            }
+        } catch (error) {
+            console.error('初始化匹配策略配置失败:', error);
+
+            // 创建一个基本的默认配置
+            this.matchingStrategyConfig = {
+                strategies: {
+                    nounDirectMatch: { enabled: true, priority: 1, threshold: 0.1 },
+                    originalTextMatch: { enabled: true, priority: 2, threshold: 0.2 }
+                },
+                getEnabledStrategies: function() {
+                    return Object.entries(this.strategies)
+                        .filter(([_, strategy]) => strategy.enabled)
+                        .sort((a, b) => a[1].priority - b[1].priority)
+                        .map(([key, strategy]) => ({ key, ...strategy }));
+                }
+            };
+        }
+    }
+
+    /**
      * 初始化 Fuse.js 索引
      */
     initialize() {
@@ -199,6 +253,13 @@ class FuseMatcher {
 
             // 初始化智能分类器
             this.initSmartClassifier();
+
+
+
+            // 将匹配策略配置添加到全局状态
+            if (window.pluginState) {
+                window.pluginState.matchingStrategyConfig = this.matchingStrategyConfig;
+            }
         } catch (error) {
             console.error('初始化 Fuse.js 索引时出错:', error);
         }
@@ -331,7 +392,11 @@ class FuseMatcher {
 
             // 如果没有词性分析结果，使用原始文本
             console.log(`[匹配引擎] 使用原始文本进行匹配: "${text}"`);
-            const searchResults = this.fuseIndex.search(text);
+
+            // 使用默认搜索选项
+            let searchOptions = {};
+
+            const searchResults = this.fuseIndex.search(text, searchOptions);
 
             // 如果没有结果，返回未匹配
             if (!searchResults || searchResults.length === 0) {
@@ -630,6 +695,10 @@ class FuseMatcher {
         }
     }
 
+
+
+
+
     /**
      * 根据分类和子分类查找术语
      * @param {string} category - 分类名称
@@ -725,11 +794,15 @@ class FuseMatcher {
         if (!nouns || nouns.length === 0) return null;
 
         for (const noun of nouns) {
-            if (noun.word.length < 2) continue; // 跳过太短的词
+            // 处理不同格式的名词对象
+            const word = typeof noun === 'string' ? noun : (noun.word || '');
 
-            const nounMatch = this.findMatch(noun.word, { threshold: 0.1 }); // 使用更低的阈值
+            if (!word || word.length < 2) continue; // 跳过空或太短的词
+
+            console.log(`[匹配引擎] 尝试匹配名词: "${word}"`);
+            const nounMatch = this.findMatch(word, { threshold: 0.1 }); // 使用更低的阈值
             if (nounMatch && nounMatch.matched) {
-                console.log(`[匹配引擎] 名词直接匹配成功: "${noun.word}" -> ${nounMatch.catID}`);
+                console.log(`[匹配引擎] 名词直接匹配成功: "${word}" -> ${nounMatch.catID}`);
                 return nounMatch.catID;
             }
         }
@@ -743,67 +816,139 @@ class FuseMatcher {
      * @param {Object} aiClassification - AI分类结果（可选）
      * @param {Array} posAnalysis - 词性分析结果（可选）
      * @param {Object} options - 识别选项
-     * @returns {string|null} 分类ID或null
+     * @returns {Promise<string|null>} 分类ID或null
      */
-    identifyCategory(text, aiClassification = null, posAnalysis = null, options = {}) {
+    async identifyCategory(text, aiClassification = null, posAnalysis = null, options = {}) {
         // 如果提供了AI分类结果，优先使用
         if (aiClassification && aiClassification.catID && this.isValidCatID(aiClassification.catID)) {
             return aiClassification.catID;
         }
 
-        // 检查是否为简单文件名（不包含空格或特殊字符）
-        const isSimpleFilename = !/[\s\-_]/.test(text) && text.length < 15;
+        // 获取启用的匹配策略，按优先级排序
+        let enabledStrategies = [];
+
+        if (this.matchingStrategyConfig && typeof this.matchingStrategyConfig.getEnabledStrategies === 'function') {
+            // 使用配置类的方法获取启用的策略
+            enabledStrategies = this.matchingStrategyConfig.getEnabledStrategies();
+        } else if (this.matchingStrategyConfig && this.matchingStrategyConfig.strategies) {
+            // 手动过滤启用的策略
+            enabledStrategies = Object.entries(this.matchingStrategyConfig.strategies)
+                .filter(([_, strategy]) => strategy.enabled)
+                .sort((a, b) => a[1].priority - b[1].priority)
+                .map(([key, strategy]) => ({ key, ...strategy }));
+        } else {
+            // 如果没有配置，使用默认策略
+            console.warn('[匹配引擎] 未找到有效的匹配策略配置，使用默认策略');
+            enabledStrategies = [
+                { key: 'nounDirectMatch', priority: 1, threshold: 0.1, enabled: true },
+                { key: 'originalTextMatch', priority: 2, threshold: 0.2, enabled: true }
+            ];
+        }
+
+        if (enabledStrategies.length === 0) {
+            console.warn('没有启用的匹配策略，无法识别分类');
+            return null;
+        }
+
+        // 记录匹配过程
+        console.log(`[匹配引擎] 开始识别分类，文本: "${text}"`);
+        console.log(`[匹配引擎] 启用的匹配策略 (${enabledStrategies.length}): ${enabledStrategies.map(s => s.key).join(', ')}`);
+
+        // 准备匹配所需的数据
         const hasValidPosAnalysis = posAnalysis && Array.isArray(posAnalysis) && posAnalysis.length > 0;
+        const nouns = hasValidPosAnalysis ? posAnalysis.filter(item => item.pos === 'noun') : [];
 
-        // 如果是简单文件名，直接尝试关键词匹配
-        if (isSimpleFilename && hasValidPosAnalysis) {
-            // 尝试直接匹配名词
-            const nouns = posAnalysis.filter(item => item.pos === 'noun');
-            const nounMatchResult = this._tryMatchNouns(nouns);
-            if (nounMatchResult) return nounMatchResult;
+        // 按优先级尝试每种匹配策略
+        for (const strategy of enabledStrategies) {
+            console.log(`[匹配引擎] 尝试匹配策略: ${strategy.key} (优先级: ${strategy.priority})`);
 
-            // 如果名词匹配失败，尝试直接匹配整个文本
-            const directMatch = this.findMatch(text, { threshold: 0.1 });
-            if (directMatch && directMatch.matched) {
-                return directMatch.catID;
+            let matchResult = null;
+
+            // 根据策略类型执行不同的匹配逻辑
+            switch (strategy.key) {
+                case 'nounDirectMatch':
+                    // 单词级直接匹配
+                    if (hasValidPosAnalysis && nouns.length > 0) {
+                        // 使用名词匹配
+                        matchResult = this._tryMatchNouns(nouns);
+
+                        if (matchResult) {
+                            console.log(`[匹配引擎] 名词直接匹配成功: ${matchResult}`);
+                            return matchResult;
+                        }
+                    }
+                    break;
+
+                case 'enhancedTextMatch':
+                    // 增强搜索文本匹配
+                    if (hasValidPosAnalysis) {
+                        // 使用增强文本匹配
+                        const enhancedOptions = {
+                            ...options,
+                            posAnalysis,
+                            threshold: strategy.threshold || 0.2
+                        };
+                        const match = this.findMatch(text, enhancedOptions);
+                        if (match && match.matched && match.matchType === 'fuse_enhanced') {
+                            console.log(`[匹配引擎] 增强搜索文本匹配成功: ${match.catID}`);
+                            return match.catID;
+                        }
+                    }
+                    break;
+
+                case 'originalTextMatch':
+                    // 原始文本完整匹配
+                    const originalOptions = {
+                        ...options,
+                        threshold: strategy.threshold || 0.2,
+                        skipEnhanced: true // 跳过增强匹配
+                    };
+                    const originalMatch = this.findMatch(text, originalOptions);
+                    if (originalMatch && originalMatch.matched && originalMatch.matchType === 'fuse') {
+                        console.log(`[匹配引擎] 原始文本完整匹配成功: ${originalMatch.catID}`);
+                        return originalMatch.catID;
+                    }
+                    break;
+
+                case 'bilingualTextMatch':
+                    // 双语文本匹配
+                    if (options.translatedText) {
+                        // 使用双语匹配
+                        const bilingualOptions = {
+                            ...options,
+                            threshold: strategy.threshold || 50,
+                            originalWeight: strategy.originalWeight || 2.0,
+                            translatedWeight: strategy.translatedWeight || 2.0
+                        };
+
+                        if (hasValidPosAnalysis) {
+                            bilingualOptions.posAnalysis = posAnalysis;
+                        }
+
+                        const bilingualMatch = this.findMatchWithBilingualText(
+                            text,
+                            options.translatedText,
+                            bilingualOptions
+                        );
+
+                        if (bilingualMatch && bilingualMatch.matched) {
+                            console.log(`[匹配引擎] 双语文本匹配成功: ${bilingualMatch.catID}`);
+                            return bilingualMatch.catID;
+                        }
+                    }
+                    break;
+
+
+
+
+
+                default:
+                    console.warn(`[匹配引擎] 未知的匹配策略: ${strategy.key}`);
             }
         }
 
-        // 如果提供了翻译文本，使用双语匹配
-        if (options.translatedText) {
-            // 如果提供了词性分析结果，将其添加到选项中
-            if (hasValidPosAnalysis) {
-                options.posAnalysis = posAnalysis;
-            }
-
-            const bilingualMatch = this.findMatchWithBilingualText(text, options.translatedText, options);
-            if (bilingualMatch && bilingualMatch.matched) {
-                return bilingualMatch.catID;
-            }
-        }
-
-        // 使用单语匹配
-        // 如果提供了词性分析结果，将其添加到选项中
-        if (hasValidPosAnalysis) {
-            options.posAnalysis = posAnalysis;
-        }
-
-        // 添加调试选项，降低匹配阈值
-        options.threshold = options.threshold || 0.2; // 单语匹配阈值
-
-        const match = this.findMatch(text, options);
-        if (match && match.matched) {
-            return match.catID;
-        }
-
-        // 如果词性分析结果中有名词，尝试直接匹配名词
-        if (hasValidPosAnalysis) {
-            const nouns = posAnalysis.filter(item => item.pos === 'noun');
-            const nounMatchResult = this._tryMatchNouns(nouns);
-            if (nounMatchResult) return nounMatchResult;
-        }
-
-        // 如果所有匹配都失败，返回null
+        // 如果所有匹配策略都失败，返回null
+        console.log('[匹配引擎] 所有匹配策略都失败，无法识别分类');
         return null;
     }
 }

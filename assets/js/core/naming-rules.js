@@ -269,12 +269,20 @@ class NamingRules {
             // 使用标准化的英文描述（如果有），否则使用不带序号的文件名
             let fxName = file.standardizedName || file.nameWithoutNumber || file.name;
 
-            // 使用NamingUtils应用命名风格
-            fxName = NamingUtils.applyNamingStyle(
-                fxName,
-                this.settings.namingStyle,
-                this.settings.customSeparator
-            );
+            // 🔥 关键修复：避免重复应用命名风格
+            // 如果使用的是standardizedName，说明已经在file-processor中应用过命名风格了
+            if (file.standardizedName) {
+                // standardizedName已经应用过命名风格，直接使用
+                console.log(`📋 使用已格式化的标准化名称: ${fxName}`);
+            } else {
+                // 只有当使用原始文件名时才应用命名风格
+                console.log(`🎨 对原始文件名应用命名风格: ${fxName}`);
+                fxName = NamingUtils.applyNamingStyle(
+                    fxName,
+                    this.settings.namingStyle,
+                    this.settings.customSeparator
+                );
+            }
 
             // 如果没有命名风格，规范化英文文本
             if (!this.settings.namingStyle || this.settings.namingStyle === 'none') {

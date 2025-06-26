@@ -20,14 +20,14 @@ class TranslationService {
             aiModel: 'glm-4',
             zhipuModel: 'glm-4',
             deepseekModel: 'deepseek-chat', // Deepseek仅支持deepseek-chat模型
+            bailianModel: 'qwen-max', // 阿里云百炼默认使用通义千问Max模型
             customPrompt: '',
             apiKeys: {
                 zhipu: '',
                 deepseek: '',
                 openrouter: '',
-                libre: ''
+                bailian: ''
             },
-            libreEndpoint: 'https://libretranslate.com/',
             standardizeEnglish: false, // 是否对英文进行标准化处理
             namingStyle: 'none', // 命名风格：'none', 'camelCase', 'PascalCase', 'snake_case', 'kebab-case', 'custom'
             customSeparator: '_' // 自定义分隔符
@@ -53,16 +53,17 @@ class TranslationService {
                 this.activeProvider = this.providers['openrouter'];
                 Logger.info('已设置默认活动翻译提供者: OpenRouter AI');
             }
-            // 如果没有OpenRouter，尝试使用Google翻译
+            // 如果没有OpenRouter，尝试使用阿里云百炼
+            else if (this.providers['bailian']) {
+                this.activeProvider = this.providers['bailian'];
+                Logger.info('已设置默认活动翻译提供者: 阿里云百炼');
+            }
+            // 如果没有阿里云百炼，尝试使用Google翻译
             else if (this.providers['google']) {
                 this.activeProvider = this.providers['google'];
                 Logger.info('已设置默认活动翻译提供者: Google Translate');
             }
-            // 如果没有Google翻译，尝试使用LibreTranslate
-            else if (this.providers['libre']) {
-                this.activeProvider = this.providers['libre'];
-                Logger.info('已设置默认活动翻译提供者: LibreTranslate');
-            } else {
+            else {
                 // 否则使用第一个可用的提供者
                 const providers = Object.values(this.providers);
                 if (providers.length > 0) {
@@ -90,11 +91,11 @@ class TranslationService {
             // 注册OpenRouter AI提供者作为备选
             this.registerProvider(new OpenRouterProvider(this.settings));
 
+            // 注册阿里云百炼提供者
+            this.registerProvider(new BailianProvider(this.settings));
+
             // 注册Google翻译提供者作为备选
             this.registerProvider(new GoogleTranslateProvider(this.settings));
-
-            // 也注册LibreTranslate提供者作为备选
-            this.registerProvider(new LibreTranslateProvider(this.settings));
 
             Logger.info('已注册默认翻译提供者');
         } catch (error) {
@@ -127,6 +128,22 @@ class TranslationService {
 
         this.activeProvider = this.providers[providerId];
         this.settings.provider = providerId;
+
+        // 确保提供者的设置是最新的
+        if (!this.activeProvider.settings.apiKeys) {
+            this.activeProvider.settings.apiKeys = {};
+        }
+
+        // 确保提供者的API密钥是最新的
+        if (this.settings.apiKeys && this.settings.apiKeys[providerId]) {
+            this.activeProvider.settings.apiKeys[providerId] = this.settings.apiKeys[providerId];
+        }
+
+        // 确保百炼模型设置是最新的
+        if (providerId === 'bailian' && this.settings.bailianModel) {
+            this.activeProvider.settings.bailianModel = this.settings.bailianModel;
+        }
+
         Logger.info(`已设置活动翻译提供者: ${this.activeProvider.getName()}`);
     }
 
@@ -143,7 +160,28 @@ class TranslationService {
      * @param {Object} settings - 翻译设置
      */
     setSettings(settings) {
+        // 确保apiKeys对象存在
+        if (!this.settings.apiKeys) {
+            this.settings.apiKeys = {};
+        }
+
+        // 确保settings.apiKeys对象存在并正确合并
+        if (settings.apiKeys) {
+            // 合并apiKeys对象，确保所有提供者的密钥都存在
+            this.settings.apiKeys = { ...this.settings.apiKeys, ...settings.apiKeys };
+
+            // 从settings中删除apiKeys，以避免下面的浅合并覆盖整个apiKeys对象
+            const { apiKeys, ...restSettings } = settings;
+            settings = restSettings;
+        }
+
+        // 合并其他设置
         this.settings = { ...this.settings, ...settings };
+
+        // 确保百炼模型设置存在
+        if (!this.settings.bailianModel) {
+            this.settings.bailianModel = 'qwen-max';
+        }
 
         // 更新所有提供者的设置
         for (const providerId in this.providers) {
@@ -155,7 +193,7 @@ class TranslationService {
             this.setActiveProvider(settings.provider);
         }
 
-        Logger.info('翻译服务设置已更新', settings);
+        Logger.debug('翻译服务设置已更新', this.settings);
     }
 
     /**
@@ -451,6 +489,21 @@ class TranslationService {
     }
 
     /**
+     * 设置阿里云百炼模型
+     * @param {string} model - 模型名称
+     */
+    setBailianModel(model) {
+        this.settings.bailianModel = model;
+
+        // 更新百炼提供者的设置
+        if (this.providers['bailian']) {
+            this.providers['bailian'].settings.bailianModel = model;
+        }
+
+        Logger.info(`已设置阿里云百炼模型: ${model}`);
+    }
+
+    /**
      * 设置API密钥
      * @param {string} provider - 提供者ID
      * @param {string} key - API密钥
@@ -460,22 +513,19 @@ class TranslationService {
             this.settings.apiKeys = {};
         }
         this.settings.apiKeys[provider] = key;
-        Logger.info(`已设置${provider}API密钥`);
-    }
 
-    /**
-     * 设置LibreTranslate端点
-     * @param {string} endpoint - 端点URL
-     */
-    setLibreEndpoint(endpoint) {
-        this.settings.libreEndpoint = endpoint;
-        Logger.info(`已设置LibreTranslate端点: ${endpoint}`);
-
-        // 更新LibreTranslate提供者的端点
-        if (this.providers['libre']) {
-            this.providers['libre'].setEndpoint(endpoint);
+        // 更新对应提供者的设置
+        if (this.providers[provider]) {
+            if (!this.providers[provider].settings.apiKeys) {
+                this.providers[provider].settings.apiKeys = {};
+            }
+            this.providers[provider].settings.apiKeys[provider] = key;
         }
+
+        Logger.info(`已设置${provider}API密钥: ${key ? '******' : '(空)'}`);
     }
+
+
 
     /**
      * 发送请求到AI接口

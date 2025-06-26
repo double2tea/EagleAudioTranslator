@@ -10,36 +10,40 @@ Thumbs.db
 
 # 依赖目录
 node_modules/
-bower_components/
 
 # 日志文件
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # 环境变量文件
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
 
 # 构建输出
 /dist
 /build
-/out
 
 # 临时文件
 /tmp
 /temp
+temp_package/
 
 # 缓存
 .cache/
 .npm/
-.eslintcache
 
-# 其他
+# 开发文档（临时修复报告等）
+*_FIX*.md
+*_ANALYSIS*.md
+*_SUMMARY*.md
+*_REPORT*.md
+*_TEST*.md
+
+# 备份文件
+*_副本.*
 *.bak
 *.swp
 *.swo
+
+# 打包文件
+*.eagleplugin

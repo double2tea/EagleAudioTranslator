@@ -107,7 +107,7 @@ function initPlugin() {
                     console.log('开始直接使用FuseMatcher加载CSV文件...');
 
                     // 创建FuseMatcher实例，直接传入CSV文件路径
-                    const fuseMatcher = new FuseMatcher('./assets/data/categorylist.csv');
+                    const fuseMatcher = new FuseMatcher('./assets/data/UCSv8.2.1.csv');
                     console.log('FuseMatcher实例创建成功');
 
                     // 设置到全局状态
@@ -119,14 +119,14 @@ function initPlugin() {
 
                     // 如果失败，回退到使用CSVMatcher
                     console.log('回退到使用CSVMatcher...');
-                    const csvMatcher = new CSVMatcher('./assets/data/categorylist.csv');
+                    const csvMatcher = new CSVMatcher('./assets/data/UCSv8.2.1.csv');
                     window.pluginState.csvMatcher = csvMatcher;
                     updateLoadingStatus('术语库加载完成，回退到原始匹配引擎');
                 }
             } else {
                 // 如果必要的库不可用，使用CSV匹配器
                 console.log('必要的库不可用，使用CSVMatcher...');
-                const csvMatcher = new CSVMatcher('./assets/data/categorylist.csv');
+                const csvMatcher = new CSVMatcher('./assets/data/UCSv8.2.1.csv');
                 window.pluginState.csvMatcher = csvMatcher;
                 console.log('CSV匹配器初始化完成');
                 updateLoadingStatus('术语库加载完成，使用原始匹配引擎');
@@ -157,7 +157,7 @@ function initPlugin() {
         updateLoadingStatus('文件处理器已就绪');
 
         // 等待 DOM 加载完成后再初始化 UI 组件
-        const initUIComponents = function() {
+        const initUIComponents = async function() {
             try {
                 console.log('开始初始化 UI 组件');
                 updateLoadingStatus('初始化用户界面...');
@@ -177,23 +177,35 @@ function initPlugin() {
                 updateLoadingStatus('预览面板已就绪');
 
                 // 初始化文件选择器
-                window.pluginState.fileSelector = new FileSelector(
-                    window.pluginState.fileProcessor,
-                    function(files) {
-                        // 选中文件后的回调
-                        updateStatus('已选择 ' + files.length + ' 个音频文件');
+                window.pluginState.fileSelector = new FileSelector();
 
-                        // 更新预览面板
-                        if (window.pluginState.previewPanel) {
-                            window.pluginState.previewPanel.showPreview(files);
-                        }
+                // 设置文件选择回调
+                window.pluginState.fileSelector.onFilesSelected = function(files) {
+                    // 选中文件后的回调
+                    updateStatus('已选择 ' + files.length + ' 个音频文件');
 
-                        // 激活工作流程步骤
-                        activateWorkflowStep(2);
+                    // 更新预览面板
+                    if (window.pluginState.previewPanel) {
+                        window.pluginState.previewPanel.showPreview(files);
                     }
-                );
+
+                    // 激活工作流程步骤
+                    activateWorkflowStep(2);
+                };
                 console.log('文件选择器初始化成功');
                 updateLoadingStatus('文件选择器已就绪');
+
+                // 初始化文件夹树选择器
+                if (window.pluginState.fileSelector && typeof window.pluginState.fileSelector.initializeFolderTree === 'function') {
+                    try {
+                        await window.pluginState.fileSelector.initializeFolderTree();
+                        console.log('文件夹树选择器初始化成功');
+                        updateLoadingStatus('文件夹树选择器已就绪');
+                    } catch (error) {
+                        console.error('文件夹树选择器初始化失败:', error);
+                        updateLoadingStatus('文件夹树选择器初始化失败，但不影响其他功能');
+                    }
+                }
 
                 // 初始化主题管理器
                 initThemeManager();
@@ -204,8 +216,8 @@ function initPlugin() {
                 // 初始化翻译设置
                 initTranslationSettings();
 
-                // 初始化分词与匹配面板
-                initTokenizationPanel();
+                // 初始化本地分词系统
+                initLocalTokenizer();
 
                 window.pluginState.initialized = true;
                 console.log('UI组件初始化完成');
@@ -776,125 +788,87 @@ function initTranslationSettings() {
         });
     }
 
-    // LibreTranslate设置
-    const libreEndpointInput = document.getElementById('libreEndpoint');
-    const libreKeyInput = document.getElementById('libreKey');
 
-    if (libreEndpointInput && window.pluginState.translationService) {
-        libreEndpointInput.addEventListener('change', function() {
-            window.pluginState.translationService.setLibreEndpoint(this.value);
-        });
 
-        // 从本地存储加载端点（如果有）
-        const savedEndpoint = localStorage.getItem('libreEndpoint');
-        if (savedEndpoint) {
-            libreEndpointInput.value = savedEndpoint;
-            window.pluginState.translationService.setLibreEndpoint(savedEndpoint);
-        }
+    // 自定义提示设置 - 支持多个翻译提供者
+    const providerIds = ['zhipu', 'deepseek', 'openrouter', 'bailian', 'google'];
 
-        // 保存到本地存储
-        libreEndpointInput.addEventListener('blur', function() {
-            if (this.value) {
-                localStorage.setItem('libreEndpoint', this.value);
-            }
-        });
-    }
+    providerIds.forEach(providerId => {
+        const customPromptSelect = document.getElementById(`${providerId}PromptID`);
+        const customPromptContainer = document.getElementById(`${providerId}CustomPromptContainer`);
+        const promptTemplateTextarea = document.getElementById(`${providerId}PromptTemplate`);
 
-    if (libreKeyInput && window.pluginState.translationService) {
-        libreKeyInput.addEventListener('change', function() {
-            window.pluginState.translationService.setAPIKey('libre', this.value);
-        });
+        if (customPromptSelect && window.pluginState.translationService) {
+            // 显示/隐藏自定义提示模板输入框
+            customPromptSelect.addEventListener('change', function() {
+                if (this.value === 'custom' && customPromptContainer) {
+                    customPromptContainer.style.display = 'block';
 
-        // 从本地存储加载密钥（如果有）
-        const savedKey = localStorage.getItem('libreKey');
-        if (savedKey) {
-            libreKeyInput.value = savedKey;
-            window.pluginState.translationService.setAPIKey('libre', savedKey);
-        }
-
-        // 保存到本地存储
-        libreKeyInput.addEventListener('blur', function() {
-            if (this.value) {
-                localStorage.setItem('libreKey', this.value);
-            }
-        });
-    }
-
-    // 自定义提示设置
-    const customPromptIDSelect = document.getElementById('customPromptID');
-    const customPromptContainer = document.getElementById('customPromptContainer');
-    const promptTemplateTextarea = document.getElementById('promptTemplate');
-
-    if (customPromptIDSelect && window.pluginState.translationService) {
-        // 显示/隐藏自定义提示模板输入框
-        customPromptIDSelect.addEventListener('change', function() {
-            if (this.value === 'custom' && customPromptContainer) {
-                customPromptContainer.style.display = 'block';
-
-                // 如果有保存的自定义提示模板，使用它
-                if (promptTemplateTextarea && promptTemplateTextarea.value) {
-                    window.pluginState.translationService.setPromptTemplate(promptTemplateTextarea.value);
+                    // 如果有保存的自定义提示模板，使用它
+                    if (promptTemplateTextarea && promptTemplateTextarea.value) {
+                        window.pluginState.translationService.setPromptTemplate(promptTemplateTextarea.value);
+                    }
+                } else {
+                    if (customPromptContainer) {
+                        customPromptContainer.style.display = 'none';
+                    }
+                    window.pluginState.translationService.setCustomPrompt(this.value);
+                    updateStatus(`已应用提示风格: ${this.options[this.selectedIndex].text}`);
                 }
-            } else {
-                if (customPromptContainer) {
-                    customPromptContainer.style.display = 'none';
+            });
+
+            // 从本地存储加载自定义提示ID
+            const savedPromptID = localStorage.getItem(`${providerId}PromptID`);
+            if (savedPromptID) {
+                customPromptSelect.value = savedPromptID;
+
+                // 如果是自定义提示，显示自定义提示模板输入框
+                if (savedPromptID === 'custom' && customPromptContainer) {
+                    customPromptContainer.style.display = 'block';
                 }
-                window.pluginState.translationService.setCustomPrompt(this.value);
-                updateStatus(`已应用提示风格: ${this.options[this.selectedIndex].text}`);
-            }
-        });
 
-        // 从本地存储加载自定义提示ID
-        const savedPromptID = localStorage.getItem('customPromptID');
-        if (savedPromptID) {
-            customPromptIDSelect.value = savedPromptID;
-
-            // 如果是自定义提示，显示自定义提示模板输入框
-            if (savedPromptID === 'custom' && customPromptContainer) {
-                customPromptContainer.style.display = 'block';
+                // 设置初始值
+                window.pluginState.translationService.setCustomPrompt(savedPromptID);
             }
 
-            // 设置初始值
-            window.pluginState.translationService.setCustomPrompt(savedPromptID);
+            // 保存到本地存储
+            customPromptSelect.addEventListener('change', function() {
+                localStorage.setItem(`${providerId}PromptID`, this.value);
+            });
         }
 
-        // 保存到本地存储
-        customPromptIDSelect.addEventListener('change', function() {
-            localStorage.setItem('customPromptID', this.value);
-        });
-    }
+        // 自定义提示模板输入框
+        if (promptTemplateTextarea && window.pluginState.translationService) {
+            promptTemplateTextarea.addEventListener('input', function() {
+                if (customPromptSelect && customPromptSelect.value === 'custom') {
+                    window.pluginState.translationService.setPromptTemplate(this.value);
+                }
+            });
 
-    // 自定义提示模板输入框
-    if (promptTemplateTextarea && window.pluginState.translationService) {
-        promptTemplateTextarea.addEventListener('input', function() {
-            if (customPromptIDSelect.value === 'custom') {
-                window.pluginState.translationService.setPromptTemplate(this.value);
+            // 从本地存储加载自定义提示模板
+            const savedPromptTemplate = localStorage.getItem(`${providerId}PromptTemplate`);
+            if (savedPromptTemplate) {
+                promptTemplateTextarea.value = savedPromptTemplate;
+                window.pluginState.translationService.setPromptTemplate(savedPromptTemplate);
             }
-        });
 
-        // 从本地存储加载自定义提示模板
-        const savedPromptTemplate = localStorage.getItem('promptTemplate');
-        if (savedPromptTemplate) {
-            promptTemplateTextarea.value = savedPromptTemplate;
-            window.pluginState.translationService.setPromptTemplate(savedPromptTemplate);
+            // 保存到本地存储
+            promptTemplateTextarea.addEventListener('blur', function() {
+                if (this.value) {
+                    localStorage.setItem(`${providerId}PromptTemplate`, this.value);
+                }
+            });
         }
+    });
 
-        // 保存到本地存储
-        promptTemplateTextarea.addEventListener('blur', function() {
-            if (this.value) {
-                localStorage.setItem('promptTemplate', this.value);
-            }
-        });
-    }
-
-    // 初始化显示/隐藏自定义提示模板输入框
-    if (customPromptIDSelect && customPromptContainer) {
-        if (customPromptIDSelect.value === 'custom') {
-            customPromptContainer.style.display = 'block';
-        } else {
-            customPromptContainer.style.display = 'none';
+    // 清理旧的localStorage数据（如果有）
+    const keysToRemove = ['libreEndpoint', 'libreKey', 'customPromptID', 'promptTemplate'];
+    keysToRemove.forEach(key => {
+        if (localStorage.getItem(key)) {
+            localStorage.removeItem(key);
+            console.log(`已清理旧的localStorage数据: ${key}`);
         }
-    }
+    });
 
     // 缓存和术语库设置
     const useCacheCheckbox = document.getElementById('useCache');
@@ -951,25 +925,19 @@ function initTranslationSettings() {
 /**
  * 初始化分词与匹配面板
  */
-function initTokenizationPanel() {
+function initLocalTokenizer() {
     try {
-        console.log('初始化分词与匹配面板');
+        console.log('初始化本地分词系统');
 
         // 检查FuseMatcher是否可用
         if (!window.pluginState.csvMatcher) {
-            console.warn('csvMatcher不可用，无法初始化分词与匹配面板');
-            return;
-        }
-
-        // 检查分词面板类是否可用
-        if (typeof TokenizationPanel === 'undefined') {
-            console.warn('TokenizationPanel类不可用，无法初始化分词与匹配面板');
+            console.warn('csvMatcher不可用，无法初始化本地分词系统');
             return;
         }
 
         // 检查SmartClassifier类是否可用
         if (typeof SmartClassifier === 'undefined') {
-            console.warn('SmartClassifier类不可用，无法初始化分词与匹配面板');
+            console.warn('SmartClassifier类不可用，无法初始化本地分词系统');
             return;
         }
 
@@ -1006,60 +974,60 @@ function initTokenizationPanel() {
             }
         }
 
-        // 创建分词与匹配面板实例
-        window.pluginState.tokenizationPanel = new TokenizationPanel(
-            smartClassifier
-        );
+        // 将smartClassifier实例保存到全局状态
+        window.pluginState.smartClassifier = smartClassifier;
 
         // 输出smartClassifier的状态，用于调试
-        console.log('分词与匹配面板使用的SmartClassifier实例状态:', {
+        console.log('本地分词系统SmartClassifier实例状态:', {
             initialized: smartClassifier.initialized,
-            hasAliyunNLPAdapter: !!smartClassifier.aliyunNLPAdapter,
-            aliyunNLPAdapterInitialized: smartClassifier.aliyunNLPAdapter ? smartClassifier.aliyunNLPAdapter.initialized : false
+            hasChineseTokenizer: !!smartClassifier.chineseTokenizer,
+            hasNlpProcessor: !!smartClassifier.nlpProcessor
         });
 
-        console.log('分词与匹配面板初始化成功');
 
-        // 保持向后兼容
-        window.pluginState.aliyunNLPPanel = window.pluginState.tokenizationPanel;
+
+        console.log('本地分词系统初始化成功');
+
+        // 初始化匹配策略配置面板
+        try {
+            // 检查必要的类和元素
+            if (typeof MatchingStrategyPanel === 'undefined') {
+                console.warn('MatchingStrategyPanel类不可用，无法初始化匹配策略配置面板');
+            } else {
+                // 查找匹配策略配置面板容器
+                const matchingStrategyContainer = document.getElementById('matchingStrategyContainer');
+                if (matchingStrategyContainer) {
+                    // 创建匹配策略配置面板实例
+                    window.pluginState.matchingStrategyPanel = new MatchingStrategyPanel();
+
+                    // 初始化面板
+                    if (window.pluginState.matchingStrategyPanel.initialize(matchingStrategyContainer)) {
+                        console.log('匹配策略配置面板初始化成功');
+                    } else {
+                        console.warn('匹配策略配置面板初始化失败');
+                    }
+                } else {
+                    console.warn('未找到匹配策略配置面板容器，无法初始化匹配策略配置面板');
+                }
+            }
+        } catch (error) {
+            console.error('初始化匹配策略配置面板失败:', error);
+        }
 
         // 绑定匹配策略选择器事件
         const matchStrategySelect = document.getElementById('matchStrategy');
-        const aliyunMatchStrategySelect = document.getElementById('aliyunMatchStrategy');
 
-        if (matchStrategySelect && aliyunMatchStrategySelect) {
-            // 确保两个选择器都有初始值
+        if (matchStrategySelect) {
+            // 确保选择器有初始值
             if (!matchStrategySelect.value || matchStrategySelect.value === 'aliyun') {
                 matchStrategySelect.value = 'auto';
             }
 
-            if (!aliyunMatchStrategySelect.value || aliyunMatchStrategySelect.value === 'aliyun') {
-                aliyunMatchStrategySelect.value = 'auto';
-            }
-
-            // 同步两个选择器的值
+            // 绑定变更事件
             matchStrategySelect.addEventListener('change', function() {
                 // 如果选择了'aliyun'，改为'auto'
                 if (this.value === 'aliyun') {
                     this.value = 'auto';
-                }
-
-                // 同步到阿里云匹配策略选择器
-                if (aliyunMatchStrategySelect) {
-                    aliyunMatchStrategySelect.value = this.value;
-                }
-
-                // 保存设置
-                if (window.pluginState && window.pluginState.translationPanel) {
-                    window.pluginState.translationPanel.settings.matchStrategy = this.value;
-                    window.pluginState.translationPanel._saveSettings();
-                }
-            });
-
-            aliyunMatchStrategySelect.addEventListener('change', function() {
-                // 同步到主匹配策略选择器
-                if (matchStrategySelect) {
-                    matchStrategySelect.value = this.value;
                 }
 
                 // 保存设置
@@ -1080,10 +1048,10 @@ function checkDependencies() {
         'TranslationService',
         'TranslationProvider',
         'GoogleTranslateProvider',
-        'LibreTranslateProvider',
         'ZhipuAIProvider',
         'DeepseekProvider',
         'OpenRouterProvider',
+        'BailianProvider',
         'NamingRules',
         'CSVMatcher',
         'AIClassifier',
@@ -1094,10 +1062,24 @@ function checkDependencies() {
         'Cache',
         'Logger',
         'Validator',
-        'AliyunNLPAdapter',
-        'SmartClassifier',
-        'TokenizationPanel'
+        'SmartClassifier'
     ];
+
+    // 匹配策略配置相关的类（可选）
+    const matchingStrategyClasses = [
+        'MatchingStrategyConfig',
+        'MatchingStrategyPanel'
+    ];
+
+    // 检查匹配策略配置相关的类
+    for (const className of matchingStrategyClasses) {
+        if (typeof window[className] === 'undefined') {
+            console.warn(`匹配策略配置相关类 ${className} 未加载`);
+        }
+    }
+
+
+
 
     const missing = [];
     for (const className of requiredClasses) {
@@ -1114,57 +1096,5 @@ function checkDependencies() {
     return true;
 }
 
-// 在页面加载完成后初始化插件
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('页面加载完成，准备初始化插件');
-
-    // 尝试初始化插件，如果失败则重试几次
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    function tryInitPlugin() {
-        attempts++;
-        console.log(`尝试初始化插件 (第${attempts}次)`);
-        updateLoadingStatus(`正在检查环境... (第${attempts}次尝试)`);
-
-        // 检查Eagle API和依赖项
-        if (typeof eagle !== 'undefined' && checkDependencies()) {
-            console.log('所有依赖项已就绪，开始初始化插件');
-            updateLoadingStatus('环境检查完成，开始初始化插件');
-            initPlugin();
-            return true;
-        } else {
-            console.warn(`Eagle环境或依赖项未就绪 (第${attempts}次尝试)`);
-
-            // 检查缺失的依赖项
-            const missingDeps = [];
-            if (typeof eagle === 'undefined') missingDeps.push('Eagle API');
-
-            const requiredClasses = [
-                'TranslationService', 'TranslationProvider', 'GoogleTranslateProvider',
-                'LibreTranslateProvider', 'ZhipuAIProvider', 'DeepseekProvider', 'OpenRouterProvider',
-                'NamingRules', 'CSVMatcher', 'AIClassifier', 'FileProcessor'
-            ];
-
-            for (const className of requiredClasses) {
-                if (typeof window[className] === 'undefined') {
-                    missingDeps.push(className);
-                }
-            }
-
-            updateLoadingStatus(`等待缺失的组件: ${missingDeps.join(', ')}`);
-
-            if (attempts < maxAttempts) {
-                // 等待一段时间后重试
-                setTimeout(tryInitPlugin, 500 * attempts);
-            } else {
-                console.error(`已尝试${maxAttempts}次初始化插件，但仍然失败`);
-                showLoadingError(`插件初始化失败，缺失组件: ${missingDeps.join(', ')}。请刷新页面或重启 Eagle 后重试。`);
-            }
-            return false;
-        }
-    }
-
-    // 开始尝试初始化
-    tryInitPlugin();
-});
+// 注意：插件初始化现在完全由Eagle的生命周期事件控制
+// 请参考 assets/js/plugin.js 中的 eagle.onPluginCreate 事件处理

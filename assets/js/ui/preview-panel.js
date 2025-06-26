@@ -40,9 +40,9 @@ class PreviewPanel {
         }
 
         // 全选/取消全选
-        const selectAllFiles = document.getElementById('selectAllFiles');
-        if (selectAllFiles) {
-            selectAllFiles.addEventListener('change', (e) => {
+        const selectAllPreviewFiles = document.getElementById('selectAllPreviewFiles');
+        if (selectAllPreviewFiles) {
+            selectAllPreviewFiles.addEventListener('change', (e) => {
                 const checkboxes = document.querySelectorAll('#previewTableBody .file-select-checkbox');
                 checkboxes.forEach(checkbox => {
                     checkbox.checked = e.target.checked;
@@ -94,9 +94,16 @@ class PreviewPanel {
             const row = document.createElement('tr');
             row.dataset.fileId = file.id;
 
+            // 调试：检查originalName属性
+            if (!file.originalName || file.originalName === 'undefined') {
+                console.warn(`文件 ${file.id} 的originalName为空或undefined:`, file);
+                // 尝试从其他属性重建originalName
+                file.originalName = (file.name || 'unknown') + (file.extension ? '.' + file.extension : '');
+            }
+
             row.innerHTML = `
                 <td><input type="checkbox" class="file-select-checkbox" ${file.selected ? 'checked' : ''}></td>
-                <td title="${file.originalName}">${file.originalName}</td>
+                <td title="${file.originalName || file.name || 'unknown'}">${file.originalName || file.name || 'unknown'}</td>
                 <td class="cat-id">${file.catID || '等待分类...'}</td>
                 <td class="alt-match">
                     ${this._createAlternateMatchDropdown(file)}
@@ -500,8 +507,6 @@ class PreviewPanel {
  */
 PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
     try {
-        console.log('开始处理替代匹配变更', { selectElement, fileId });
-
         // 获取当前页面上的PreviewPanel实例
         const previewPanels = Object.values(window).filter(obj => obj instanceof PreviewPanel);
         if (previewPanels.length === 0) {
@@ -512,7 +517,6 @@ PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
 
         const previewPanel = previewPanels[0];
         const newRank = parseInt(selectElement.value, 10);
-        console.log('新选择的排名：', newRank);
 
         // 找到对应的文件
         const file = previewPanel.files.find(f => f.id === fileId);
@@ -521,8 +525,6 @@ PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
             alert(`内部错误：找不到ID为 ${fileId} 的文件`);
             return;
         }
-
-        console.log('找到文件：', file);
 
         // 检查文件是否有匹配结果
         if (!file.matchResults || !Array.isArray(file.matchResults)) {
@@ -536,7 +538,6 @@ PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
 
         // 获取新的匹配结果
         const newMatch = file.matchResults[newRank];
-        console.log('新的匹配结果：', newMatch);
 
         if (!newMatch) {
             console.error(`找不到排名为 ${newRank} 的匹配结果`);
@@ -559,17 +560,9 @@ PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
         file.subCategoryTranslated = newMatch.term.target || '';
         file.catID = newMatch.term.catID || '';
 
-        console.log('更新后的文件分类信息：', {
-            category: file.category,
-            categoryName: file.categoryName,
-            catID: file.catID
-        });
-
         // 重新生成最终文件名
         if (window.pluginState && window.pluginState.fileProcessor) {
-            console.log('开始重新生成最终文件名');
             const newFileName = window.pluginState.fileProcessor.formatFileName(file);
-            console.log('新生成的文件名：', newFileName);
         } else {
             console.error('找不到fileProcessor实例');
         }
@@ -578,7 +571,6 @@ PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
         const fileIndex = previewPanel.files.findIndex(f => f.id === fileId);
         if (fileIndex !== -1) {
             // 更新表格中当前文件的行
-            console.log('开始更新表格行，索引：', fileIndex);
             previewPanel._updateRowData(fileIndex, file);
         } else {
             console.error('找不到文件在数组中的索引');
@@ -586,7 +578,6 @@ PreviewPanel.handleAlternateMatchChange = function(selectElement, fileId) {
 
         // 显示状态消息
         previewPanel._showStatusMessage(`已应用第 ${newRank+1} 佳匹配结果：${newMatch.term.catID}`);
-        console.log('处理替代匹配变更完成');
     } catch (error) {
         console.error('处理替代匹配变更时发生错误：', error);
         alert(`处理替代匹配变更时发生错误：${error.message}`);

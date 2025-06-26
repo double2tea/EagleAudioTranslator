@@ -1,37 +1,25 @@
 /**
- * 文件选择器
- * 用于从Eagle中选择文件
+ * 文件选择器类
+ * 负责处理文件选择相关的UI交互
  */
 class FileSelector {
-    /**
-     * 构造函数
-     * @param {FileProcessor} fileProcessor - 文件处理器实例
-     * @param {Function} onFilesSelected - 文件选择回调
-     */
-    constructor(fileProcessor, onFilesSelected) {
-        this.fileProcessor = fileProcessor;
-        this.onFilesSelected = onFilesSelected;
+    constructor() {
         this.selectedFiles = [];
-
-        // 初始化事件监听器
-        this._initEventListeners();
+        this.onFilesSelected = null;
+        this.folderTreeSelector = null;
+        this._initializeEventListeners();
+        this._initializeFolderTreeSelector();
     }
 
     /**
      * 初始化事件监听器
      * @private
      */
-    _initEventListeners() {
+    _initializeEventListeners() {
         // 从当前选中获取文件
-        const currentBtn = document.getElementById('selectFromCurrent');
-        if (currentBtn) {
-            currentBtn.addEventListener('click', () => this._selectFromCurrent());
-        }
-
-        // 从文件夹获取文件
-        const folderBtn = document.getElementById('selectFromFolder');
-        if (folderBtn) {
-            folderBtn.addEventListener('click', () => this._selectFromFolder());
+        const selectedBtn = document.getElementById('selectFromCurrent');
+        if (selectedBtn) {
+            selectedBtn.addEventListener('click', () => this._selectFromSelected());
         }
 
         // 从标签获取文件
@@ -40,64 +28,34 @@ class FileSelector {
             tagBtn.addEventListener('click', () => this._selectFromTag());
         }
 
-        // 全选/取消全选
-        const selectAllBtn = document.getElementById('selectAllFiles');
-        if (selectAllBtn) {
-            selectAllBtn.addEventListener('change', (e) => {
-                const checkboxes = document.querySelectorAll('.file-select-checkbox');
-                checkboxes.forEach(checkbox => {
-                    checkbox.checked = e.target.checked;
-                });
-            });
-        }
+
     }
 
     /**
      * 从当前选中获取文件
      * @private
      */
-    async _selectFromCurrent() {
+    async _selectFromSelected() {
         try {
             this._showLoading('正在获取当前选中的文件...');
-
-            const files = await this.fileProcessor.getCurrentSelection();
-
-            if (!files || files.length === 0) {
-                this._showError('没有选中的文件，请在Eagle中选择一些音频文件');
-                return;
-            }
-
-            this._updateSelectedFiles(files);
-        } catch (error) {
-            this._showError(`获取当前选中的文件失败: ${error.message}`);
-            Logger.error('获取当前选中的文件失败', error);
-        } finally {
-            this._hideLoading();
-        }
-    }
-
-    /**
-     * 从文件夹获取文件
-     * @private
-     */
-    async _selectFromFolder() {
-        try {
-            // 使用Eagle API的showOpenDialog方法选择文件夹
+            
             const selectedItems = await eagle.item.getSelected();
 
             if (!selectedItems || selectedItems.length === 0) {
-                this._showError('请先在Eagle中选择文件，然后再点击“从选中”按钮');
+                this._showError('请先在Eagle中选择文件，然后再点击"从选中"按钮');
                 return;
             }
 
             this._updateSelectedFiles(selectedItems);
         } catch (error) {
-            this._showError(`从文件夹获取文件失败: ${error.message}`);
-            Logger.error('从文件夹获取文件失败', error);
+            this._showError(`从选中获取文件失败: ${error.message}`);
+            Logger.error('从选中获取文件失败', error);
         } finally {
             this._hideLoading();
         }
     }
+
+
 
     /**
      * 从标签获取文件
@@ -160,20 +118,17 @@ class FileSelector {
 
             this._showLoading(`正在获取带标签 "${tagName}" 的文件...`);
 
-            // 获取所有文件
-            const allItems = await eagle.item.getSelected();
-
-            // 过滤出带指定标签的文件
-            const files = allItems.filter(item => {
-                return item.tags && Array.isArray(item.tags) && item.tags.includes(tagName);
+            // 使用Eagle API正确的方式获取带指定标签的文件
+            const items = await eagle.item.get({
+                tags: [tagName]
             });
 
-            if (!files || files.length === 0) {
-                this._showError(`没有找到带标签 "${tagName}" 的音频文件`);
+            if (!items || items.length === 0) {
+                this._showError(`没有找到带标签 "${tagName}" 的文件`);
                 return;
             }
 
-            this._updateSelectedFiles(files);
+            this._updateSelectedFiles(items);
         } catch (error) {
             this._showError(`从标签获取文件失败: ${error.message}`);
             Logger.error('从标签获取文件失败', error);
@@ -181,6 +136,8 @@ class FileSelector {
             this._hideLoading();
         }
     }
+
+
 
     /**
      * 更新选中的文件
@@ -223,7 +180,7 @@ class FileSelector {
             const fileItem = document.createElement('div');
             fileItem.className = 'file-item';
             fileItem.innerHTML = `
-                <span class="file-name" title="${file.originalName}">${file.originalName}</span>
+                <span class="file-name" title="${file.name}">${file.name}</span>
                 <span class="file-category">${file.category || ''}</span>
             `;
             listElement.appendChild(fileItem);
@@ -292,6 +249,65 @@ class FileSelector {
         }
 
         Logger.info('已清除选中的文件');
+    }
+
+    /**
+     * 初始化文件夹树选择器
+     * @private
+     */
+    _initializeFolderTreeSelector() {
+        // 确保FolderTreeSelector类已加载
+        if (typeof FolderTreeSelector !== 'undefined') {
+            this.folderTreeSelector = new FolderTreeSelector();
+
+            // 设置文件夹选择回调
+            this.folderTreeSelector.setOnFolderSelected((items, folder, includeSubfolders) => {
+                this._handleFolderTreeSelection(items, folder, includeSubfolders);
+            });
+        }
+    }
+
+    /**
+     * 手动初始化文件夹树选择器
+     * 这个方法应该在Eagle API准备好后调用
+     * @returns {Promise<void>}
+     */
+    async initializeFolderTree() {
+        if (this.folderTreeSelector && typeof this.folderTreeSelector.initialize === 'function') {
+            await this.folderTreeSelector.initialize();
+        }
+    }
+
+    /**
+     * 处理文件夹树选择
+     * @param {Array} items - 文件列表
+     * @param {Object} folder - 选中的文件夹
+     * @param {boolean} includeSubfolders - 是否包含子文件夹
+     * @private
+     */
+    _handleFolderTreeSelection(items, folder, includeSubfolders = true) {
+        try {
+            if (!items || items.length === 0) {
+                const subfoldersText = includeSubfolders ? '及其子文件夹' : '';
+                this._showError(`文件夹 "${folder.name}"${subfoldersText} 中没有找到文件`);
+                return;
+            }
+
+            this._updateSelectedFiles(items);
+            const subfoldersText = includeSubfolders ? '及其子文件夹' : '';
+            Logger.info(`从文件夹 "${folder.name}"${subfoldersText} 选择了 ${items.length} 个文件`);
+        } catch (error) {
+            this._showError(`处理文件夹选择失败: ${error.message}`);
+            Logger.error('处理文件夹选择失败', error);
+        }
+    }
+
+    /**
+     * 获取文件夹树选择器实例
+     * @returns {FolderTreeSelector|null}
+     */
+    getFolderTreeSelector() {
+        return this.folderTreeSelector;
     }
 }
 

@@ -1,0 +1,98 @@
+/* 匹配策略配置面板样式 */
+
+.panel-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.panel-description {
+    font-size: 14px;
+    margin-bottom: 15px;
+    color: #666;
+}
+
+.strategies-list {
+    margin-bottom: 20px;
+}
+
+.strategy-item {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: #f9f9f9;
+}
+
+.strategy-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.strategy-enabled {
+    margin-right: 10px;
+}
+
+.strategy-title {
+    font-weight: bold;
+    flex-grow: 1;
+}
+
+.priority-container {
+    display: flex;
+    align-items: center;
+}
+
+.priority-label {
+    margin-right: 5px;
+    font-size: 12px;
+}
+
+.priority-input {
+    width: 50px;
+    text-align: center;
+}
+
+.strategy-description {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.threshold-container,
+.param-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.threshold-label,
+.param-label {
+    width: 100px;
+    font-size: 12px;
+}
+
+.threshold-input,
+.param-input {
+    width: 80px;
+}
+
+.button-container {
+    margin-top: 15px;
+    text-align: right;
+}
+
+.reset-button {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.reset-button:hover {
+    background-color: #d32f2f;
+}

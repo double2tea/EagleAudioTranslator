@@ -6,7 +6,7 @@ class AIClassifier {
     constructor() {
         this.enabled = false;
         this.cache = new Map(); // 缓存已经查询过的结果
-        this.batchSize = 5; // 批处理大小，避免频繁请求API
+        this.batchSize = 10; // 批处理大小，避免频繁请求API
         this.batchQueue = []; // 批处理队列
         this.batchPromises = []; // 批处理Promise
         this.processingBatch = false; // 是否正在处理批次
@@ -127,11 +127,10 @@ class AIClassifier {
                 const classification = classifications[item.filename] || null;
                 console.log(`文件 ${item.filename} 的分类结果:`, classification);
 
-                // 如果是中文文件名且有英文描述，添加到分类信息中
+                // 如果是中文文件名且有英文描述，记录日志
                 if (item.isChinese && classification && hasChineseFiles) {
-                    // 确保英文描述字段存在
-                    if (classification.englishDescription) {
-                        console.log(`中文文件 ${item.filename} 获取到英文描述: ${classification.englishDescription}`);
+                    if (classification.classifications && classification.classifications[0] && classification.classifications[0].englishDescription) {
+                        console.log(`中文文件 ${item.filename} 获取到英文描述: ${classification.classifications[0].englishDescription}`);
                     }
                 }
 
@@ -175,67 +174,143 @@ class AIClassifier {
             }
         }
 
-        // 如果是中文文件名，使用中文提示词
+        // 如果是中文文件名，使用增强的中文提示词
         if (isChinese) {
-            return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下中文音效文件名，分析并提供每个文件的分类信息。
+            return `你是专业的UCS音效分类专家。UCS(Universal Category System)是音效行业标准分类系统。
 
-请使用以下格式返回结果（JSON格式）：
+## UCS分类规则：
+- **OBJECT(OBJ)**: 物体音效 - 如撞击、摩擦、破碎等
+- **DESIGNED(DSGN)**: 设计音效 - 如节奏、音乐元素、合成音效
+- **SCIENCE FICTION(SCI)**: 科幻音效 - 如激光、机器人、太空音效
+- **CARTOON(TOON)**: 卡通音效 - 如夸张效果、喜剧音效
+- **GLASS**: 玻璃音效 - 如破碎、撞击玻璃
+- **METAL**: 金属音效 - 如金属撞击、摩擦
 
+## 真实CatID示例（必须使用这些或类似的）：
+- **切割相关**: CLOTHRip(布料撕扯), GOREStab(血腥刺伤), OBJOffc(办公设备-含裁纸机), TOOLHand(手持工具-含切割器)
+- **物体音效**: OBJFash(时尚物品), OBJOffc(办公设备), OBJMisc(物体杂项)
+- **工具音效**: TOOLHand(手持工具), TOOLMisc(工具杂项)
+- **食物音效**: FOODKware(厨具), FOODTware(餐具), FOODMisc(食物杂项)
+- **机器音效**: MACHInd(工业机器), MACHOffc(办公机器), MACHMisc(机器杂项)
+
+请根据音效文件名的语义特征，智能匹配最合适的UCS分类：
+
+${filenames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
+
+返回JSON格式：
 {
   "results": [
     {
       "filename": "文件名",
-      "classification": {
-        "catID": "分类ID，必须是UCS标准表格中存在的ID，如GLASImpt、OBJTape、DSGNRythm、SCIMisc、TOONPop等",
-        "catShort": "短分类名，如OBJ、DSGN、SCI、TOON等",
-        "category": "主分类英文名，如OBJECT、DESIGNED、SCIENCE FICTION、CARTOON等",
-        "category_zh": "主分类中文名，如物体、声音设计、科幻、卡通等",
-        "subCategory": "子分类英文名，如TAPE、RHYTHMIC、MISC、POP等",
-        "subCategory_zh": "子分类中文名，如磁带、节奏性、其他、爆破等",
-        "englishDescription": "简短英文描述，不超过5个单词"
-      }
+      "classifications": [
+        {
+          "catID": "最可能的UCS分类ID",
+          "catShort": "分类简称",
+          "category": "主分类英文名",
+          "category_zh": "主分类中文名",
+          "subCategory": "子分类英文名",
+          "subCategory_zh": "子分类中文名",
+          "englishDescription": "英文描述(≤5词)",
+          "confidence": "匹配置信度(0-100)"
+        },
+        {
+          "catID": "第二可能的UCS分类ID",
+          "catShort": "分类简称",
+          "category": "主分类英文名",
+          "category_zh": "主分类中文名",
+          "subCategory": "子分类英文名",
+          "subCategory_zh": "子分类中文名",
+          "englishDescription": "英文描述(≤5词)",
+          "confidence": "匹配置信度(0-100)"
+        },
+        {
+          "catID": "第三可能的UCS分类ID",
+          "catShort": "分类简称",
+          "category": "主分类英文名",
+          "category_zh": "主分类中文名",
+          "subCategory": "子分类英文名",
+          "subCategory_zh": "子分类中文名",
+          "englishDescription": "英文描述(≤5词)",
+          "confidence": "匹配置信度(0-100)"
+        }
+      ]
     }
   ]
 }
 
-请分析以下中文音效文件名：
-${filenames.join('\n')}
-
-注意：
-1. 请只返回JSON格式的结果，不要包含其他解释文字
-2. 如果无法确定某个分类信息，可以将对应字段设为null
-3. 你必须使用UCS标准表格中存在的有效分类ID(CatID)，不要创造新的分类ID
-4. 请同时提供简短英文描述，便于生成英文标准化名称`;
+要求：
+1. 只返回JSON，无其他文字
+2. 基于音效特征智能推理分类
+3. **每个文件提供3个可能的分类选项，按置信度排序**
+4. **必须使用上述示例中的真实CatID，不要创造新的ID**
+5. 对于切割音效，优先使用: TOOLHand(手持工具), OBJOffc(办公设备), CLOTHRip(布料撕扯)
+6. 提供置信度评估，确保第一个选项置信度最高
+7. **为每个文件生成独特的英文描述，避免重复，体现文件名的具体特征**
+8. **英文描述应该简洁(≤5词)但具有区分性，突出每个音效的独特性**`;
         } else {
-            // 英文文件名使用原有提示词
-            return `你是一个专业的音效分类专家，严格按照UCS音效分类规则，请根据以下音效文件名，分析并提供每个文件的分类信息。
+            // 英文文件名使用增强的提示词
+            return `You are a professional UCS (Universal Category System) audio classification expert.
 
-请使用以下格式返回结果（JSON格式）：
+## UCS Classification Rules:
+- **OBJECT(OBJ)**: Physical object sounds - impacts, friction, breaking, etc.
+- **DESIGNED(DSGN)**: Designed sounds - rhythmic, musical elements, synthesized
+- **SCIENCE FICTION(SCI)**: Sci-fi sounds - lasers, robots, space effects
+- **CARTOON(TOON)**: Cartoon sounds - exaggerated effects, comedy sounds
+- **GLASS**: Glass sounds - breaking, impacts
+- **METAL**: Metal sounds - impacts, friction
 
+## Real CatID Examples (must use these or similar):
+- **Cutting related**: CLOTHRip(cloth rip), GOREStab(gore stab), OBJOffc(office objects-includes cutters), TOOLHand(hand tools-includes cutters)
+- **Object sounds**: OBJFash(fashion objects), OBJOffc(office objects), OBJMisc(object misc)
+- **Tool sounds**: TOOLHand(hand tools), TOOLMisc(tool misc)
+- **Food sounds**: FOODKware(kitchenware), FOODTware(tableware), FOODMisc(food misc)
+- **Machine sounds**: MACHInd(industrial machines), MACHOffc(office machines), MACHMisc(machine misc)
+
+Analyze these audio filenames and intelligently match the most appropriate UCS classification:
+
+${filenames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
+
+Return JSON format:
 {
   "results": [
     {
-      "filename": "文件名",
-      "classification": {
-        "catID": "分类ID，必须是UCS标准表格中存在的ID，如GLASImpt、OBJTape、DSGNRythm、SCIMisc、TOONPop等",
-        "catShort": "短分类名，如OBJ、DSGN、SCI、TOON等",
-        "category": "主分类英文名，如OBJECT、DESIGNED、SCIENCE FICTION、CARTOON等",
-        "category_zh": "主分类中文名，如物体、声音设计、科幻、卡通等",
-        "subCategory": "子分类英文名，如TAPE、RHYTHMIC、MISC、POP等",
-        "subCategory_zh": "子分类中文名，如磁带、节奏性、其他、爆破等"
-      }
+      "filename": "filename",
+      "classifications": [
+        {
+          "catID": "most likely UCS classification ID",
+          "catShort": "category abbreviation",
+          "category": "main category name",
+          "subCategory": "subcategory name",
+          "confidence": "matching confidence (0-100)"
+        },
+        {
+          "catID": "second likely UCS classification ID",
+          "catShort": "category abbreviation",
+          "category": "main category name",
+          "subCategory": "subcategory name",
+          "confidence": "matching confidence (0-100)"
+        },
+        {
+          "catID": "third likely UCS classification ID",
+          "catShort": "category abbreviation",
+          "category": "main category name",
+          "subCategory": "subcategory name",
+          "confidence": "matching confidence (0-100)"
+        }
+      ]
     }
   ]
 }
 
-请分析以下音效文件名：
-${filenames.join('\n')}
-
-注意：
-1. 请只返回JSON格式的结果，不要包含其他解释文字
-2. 如果无法确定某个分类信息，可以将对应字段设为null
-3. 你必须使用是UCS标准表格中存在的有效分类ID(CatID)，不要创造新的分类ID
-4. 对于数字/电子类型的音效，应使用DSGNSynth或UIGlitch`;
+Requirements:
+1. Return only JSON, no other text
+2. Intelligently infer classification based on audio characteristics
+3. **Provide 3 possible classification options for each file, sorted by confidence**
+4. **Must use real CatIDs from examples above, do not create new IDs**
+5. For cutting sounds, prefer: TOOLHand(hand tools), OBJOffc(office objects), CLOTHRip(cloth rip)
+6. Provide confidence assessment, ensure first option has highest confidence
+7. **Generate unique English descriptions for each file, avoid duplicates, reflect specific characteristics**
+8. **English descriptions should be concise (≤5 words) but distinctive, highlighting each sound's uniqueness**`;
         }
     }
 
@@ -330,16 +405,60 @@ ${filenames.join('\n')}
             const result = {};
             if (data && data.results && Array.isArray(data.results)) {
                 data.results.forEach(item => {
-                    if (item.filename && item.classification) {
-                        // 直接使用分类信息，不进行验证
-                        const classification = item.classification;
+                    if (item.filename) {
+                        // 处理新的多分类格式
+                        if (item.classifications && Array.isArray(item.classifications)) {
+                            console.log(`文件 ${item.filename} 获得 ${item.classifications.length} 个分类选项`);
 
-                        // 如果有英文描述字段，保留它
-                        if (classification.englishDescription) {
-                            console.log(`文件 ${item.filename} 包含英文描述: ${classification.englishDescription}`);
+                            // 应用命名风格到所有分类选项的英文描述
+                            item.classifications.forEach((classification, index) => {
+                                if (classification.englishDescription) {
+                                    console.log(`选项 ${index + 1} 原始英文描述: ${classification.englishDescription}`);
+
+                                    const formattedDescription = this._applyNamingStyleToDescription(
+                                        classification.englishDescription
+                                    );
+
+                                    if (formattedDescription !== classification.englishDescription) {
+                                        console.log(`选项 ${index + 1} 应用命名风格后: ${formattedDescription}`);
+                                        classification.englishDescription = formattedDescription;
+                                    }
+                                }
+                            });
+
+                            // 存储所有分类选项，供后续验证和选择
+                            result[item.filename] = {
+                                classifications: item.classifications,
+                                selectedClassification: null // 将在验证阶段设置
+                            };
+
+                            // 记录关键信息
+                            console.log(`  最佳选项: ${item.classifications[0].catID} (置信度: ${item.classifications[0].confidence})`);
                         }
+                        // 兼容旧的单分类格式
+                        else if (item.classification) {
+                            const classification = item.classification;
+                            console.log(`文件 ${item.filename} 使用旧格式，单个分类: ${classification.catID}`);
 
-                        result[item.filename] = classification;
+                            // 应用命名风格到英文描述
+                            if (classification.englishDescription) {
+                                console.log(`旧格式原始英文描述: ${classification.englishDescription}`);
+
+                                const formattedDescription = this._applyNamingStyleToDescription(
+                                    classification.englishDescription
+                                );
+
+                                if (formattedDescription !== classification.englishDescription) {
+                                    console.log(`旧格式应用命名风格后: ${formattedDescription}`);
+                                    classification.englishDescription = formattedDescription;
+                                }
+                            }
+
+                            result[item.filename] = {
+                                classifications: [classification],
+                                selectedClassification: null
+                            };
+                        }
                     }
                 });
             }
@@ -354,160 +473,86 @@ ${filenames.join('\n')}
             return result;
         } catch (error) {
             console.error('解析AI响应失败:', error, 'Response:', response);
+        }
+    }
 
-            // 尝试手动构建结果
-            try {
-                const result = {};
+    /**
+     * 应用命名风格到英文描述
+     * @param {string} description - 原始英文描述
+     * @returns {string} 应用命名风格后的描述
+     */
+    _applyNamingStyleToDescription(description) {
+        try {
+            // 获取翻译服务的设置
+            let namingStyle = 'none';
+            let customSeparator = '_';
 
-                // 为每个文件创建默认分类
-                filenames.forEach(filename => {
-                    // 对文件名进行小写处理便于匹配
-                    const lowerFilename = filename.toLowerCase();
-
-                    // 优先级 1: 动物叫声类型的音效，使用相应的动物分类
-                    if (lowerFilename.includes('sheep') || lowerFilename.includes('羊')) {
-                        result[filename] = {
-                            catID: 'ANMLFarm',
-                            catShort: 'ANML',
-                            category: 'ANIMAL',
-                            category_zh: '动物',
-                            subCategory: 'FARM',
-                            subCategory_zh: '农场'
-                        };
-                        console.log(`手动创建分类: ${filename} -> ANMLFarm`);
-                    }
-                    else if (lowerFilename.includes('cat') || lowerFilename.includes('猫')) {
-                        result[filename] = {
-                            catID: 'ANMLCat',
-                            catShort: 'ANML',
-                            category: 'ANIMAL',
-                            category_zh: '动物',
-                            subCategory: 'CAT',
-                            subCategory_zh: '猫'
-                        };
-                        console.log(`手动创建分类: ${filename} -> ANMLCat`);
-                    }
-                    else if (lowerFilename.includes('dog') || lowerFilename.includes('狗')) {
-                        result[filename] = {
-                            catID: 'ANMLDog',
-                            catShort: 'ANML',
-                            category: 'ANIMAL',
-                            category_zh: '动物',
-                            subCategory: 'DOG',
-                            subCategory_zh: '狗'
-                        };
-                        console.log(`手动创建分类: ${filename} -> ANMLDog`);
-                    }
-                    else if (lowerFilename.includes('bird') || lowerFilename.includes('鸟')) {
-                        result[filename] = {
-                            catID: 'BIRDMisc',
-                            catShort: 'BIRD',
-                            category: 'BIRD',
-                            category_zh: '鸟类',
-                            subCategory: 'MISC',
-                            subCategory_zh: '其他'
-                        };
-                        console.log(`手动创建分类: ${filename} -> BIRDMisc`);
-                    }
-                    else if (lowerFilename.includes('seagull') || lowerFilename.includes('gull') || lowerFilename.includes('海鸥')) {
-                        result[filename] = {
-                            catID: 'BIRDSea',
-                            catShort: 'BIRD',
-                            category: 'BIRD',
-                            category_zh: '鸟类',
-                            subCategory: 'SEA',
-                            subCategory_zh: '海鸟'
-                        };
-                        console.log(`手动创建分类: ${filename} -> BIRDSea`);
-                    }
-                    else if (lowerFilename.includes('cow') || lowerFilename.includes('牛')) {
-                        result[filename] = {
-                            catID: 'ANMLFarm',
-                            catShort: 'ANML',
-                            category: 'ANIMAL',
-                            category_zh: '动物',
-                            subCategory: 'FARM',
-                            subCategory_zh: '农场'
-                        };
-                        console.log(`手动创建分类: ${filename} -> ANMLFarm`);
-                    }
-
-                    // 优先级 2: 物体相关的音效
-                    else if (lowerFilename.includes('tape') || lowerFilename.includes('cassette') || lowerFilename.includes('磁带')) {
-                        result[filename] = {
-                            catID: 'OBJTape',
-                            catShort: 'OBJ',
-                            category: 'OBJECT',
-                            category_zh: '物体',
-                            subCategory: 'TAPE',
-                            subCategory_zh: '磁带'
-                        };
-                        console.log(`手动创建分类: ${filename} -> OBJTape`);
-                    }
-                    else if (lowerFilename.includes('paper') || lowerFilename.includes('纸')) {
-                        result[filename] = {
-                            catID: 'OBJPaper',
-                            catShort: 'OBJ',
-                            category: 'OBJECT',
-                            category_zh: '物体',
-                            subCategory: 'PAPER',
-                            subCategory_zh: '纸张'
-                        };
-                        console.log(`手动创建分类: ${filename} -> OBJPaper`);
-                    }
-                    else if (lowerFilename.includes('metal') || lowerFilename.includes('steel') || lowerFilename.includes('金属')) {
-                        result[filename] = {
-                            catID: 'OBJMetal',
-                            catShort: 'OBJ',
-                            category: 'OBJECT',
-                            category_zh: '物体',
-                            subCategory: 'METAL',
-                            subCategory_zh: '金属'
-                        };
-                        console.log(`手动创建分类: ${filename} -> OBJMetal`);
-                    }
-
-                    // 优先级 3: 其他特殊类型的音效
-                    else if (lowerFilename.includes('glitch')) {
-                        result[filename] = {
-                            catID: 'DSGNRythm',
-                            catShort: 'DSGN',
-                            category: 'DESIGNED',
-                            category_zh: '声音设计',
-                            subCategory: 'RHYTHMIC',
-                            subCategory_zh: '节奏性'
-                        };
-                        console.log(`手动创建分类: ${filename} -> DSGNRythm`);
-                    }
-                    else if (lowerFilename.includes('sci-fi') || lowerFilename.includes('scifi') || lowerFilename.includes('科幻')) {
-                        result[filename] = {
-                            catID: 'SCIMisc',
-                            catShort: 'SCI',
-                            category: 'SCIENCE FICTION',
-                            category_zh: '科幻',
-                            subCategory: 'MISC',
-                            subCategory_zh: '其他'
-                        };
-                        console.log(`手动创建分类: ${filename} -> SCIMisc`);
-                    }
-                    else if (lowerFilename.includes('digital') || lowerFilename.includes('electronic') || lowerFilename.includes('电子')) {
-                        result[filename] = {
-                            catID: 'DSGNSynth',
-                            catShort: 'DSGN',
-                            category: 'DESIGNED',
-                            category_zh: '声音设计',
-                            subCategory: 'SYNTHETIC',
-                            subCategory_zh: '电子合成'
-                        };
-                        console.log(`手动创建分类: ${filename} -> DSGNSynth`);
-                    }
-                });
-
-                return result;
-            } catch (fallbackError) {
-                console.error('手动构建结果失败:', fallbackError);
-                return {};
+            // 尝试从翻译服务获取命名风格设置
+            if (window.pluginState && window.pluginState.translationService) {
+                const settings = window.pluginState.translationService.getSettings();
+                namingStyle = settings.namingStyle || 'none';
+                customSeparator = settings.customSeparator || '_';
             }
+
+            // 如果没有设置命名风格，直接返回原描述
+            if (namingStyle === 'none') {
+                return description;
+            }
+
+            // 使用NamingUtils应用命名风格
+            if (window.NamingUtils && typeof window.NamingUtils.applyNamingStyle === 'function') {
+                return window.NamingUtils.applyNamingStyle(description, namingStyle, customSeparator);
+            }
+
+            // 如果NamingUtils不可用，使用简单的实现
+            return this._simpleApplyNamingStyle(description, namingStyle, customSeparator);
+
+        } catch (error) {
+            console.error('应用命名风格失败:', error);
+            return description; // 出错时返回原描述
+        }
+    }
+
+    /**
+     * 简单的命名风格应用实现
+     * @param {string} text - 要处理的文本
+     * @param {string} style - 命名风格
+     * @param {string} customSeparator - 自定义分隔符
+     * @returns {string} 处理后的文本
+     */
+    _simpleApplyNamingStyle(text, style, customSeparator = '_') {
+        if (!text) return '';
+
+        // 清理文本并分割单词
+        const cleanText = text.replace(/\s+/g, ' ').trim();
+        const words = cleanText.split(/\s+/);
+
+        switch (style) {
+            case 'camelCase':
+                return words.map((word, index) => {
+                    if (index === 0) {
+                        return word.toLowerCase();
+                    }
+                    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                }).join('');
+
+            case 'PascalCase':
+                return words.map(word => {
+                    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                }).join('');
+
+            case 'snake_case':
+                return words.map(word => word.toLowerCase()).join('_');
+
+            case 'kebab-case':
+                return words.map(word => word.toLowerCase()).join('-');
+
+            case 'custom':
+                return words.join(customSeparator);
+
+            case 'none':
+            default:
+                return cleanText;
         }
     }
 

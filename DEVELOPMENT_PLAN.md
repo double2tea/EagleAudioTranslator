@@ -2,7 +2,7 @@
 
 ## 当前已完成功能
 - 基本的文件选择和翻译功能
-- 多种翻译服务提供者集成（Google、LibreTranslate、OpenRouter、Deepseek、智谱AI）
+- 多种翻译服务提供者集成（智谱AI、Deepseek、OpenRouter、阿里云百炼、Google翻译）
 - CSV术语库匹配
 - UCS命名规则支持
 - 文件序号提取和保留
