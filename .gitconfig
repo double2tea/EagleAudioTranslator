@@ -1,0 +1,10 @@
+[credential "https://github.com"]
+	helper = /run/augment/agent-bin/git-credential-helper /run/secrets/workspace-config/workspace-agent-config.json
+[user]
+	name = double2tea
+	email = 167274682+double2tea@users.noreply.github.com
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
