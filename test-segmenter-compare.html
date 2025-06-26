@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分词器对比：Intl.Segmenter vs segmentit</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result-container {
+            display: flex;
+            gap: 20px;
+        }
+        .result-box {
+            flex: 1;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .result {
+            min-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .performance {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #666;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px;
+        }
+        .custom-dict {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .dict-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .dict-input input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .dict-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: white;
+        }
+        .dict-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .dict-item button {
+            padding: 2px 8px;
+            background-color: #f44336;
+        }
+    </style>
+    <!-- 引入segmentit库 -->
+    <script src="https://cdn.jsdelivr.net/npm/segmentit@2.0.3/dist/umd/segmentit.min.js"></script>
+</head>
+<body>
+    <h1>分词器对比：Intl.Segmenter vs segmentit</h1>
+    <p>本页面用于对比浏览器内置的Intl.Segmenter和第三方库segmentit的分词和词性分析功能。</p>
+
+    <div class="container">
+        <div class="input-group">
+            <h2>输入文本</h2>
+            <textarea id="inputText" placeholder="请输入要分析的文本...">寒冷的风吹过雪地，发出沙沙的声音。Cold wind blows over the snow ground, making a rustling sound.</textarea>
+            <button id="analyzeBtn">分析文本</button>
+        </div>
+
+        <div class="custom-dict">
+            <h2>自定义词典（segmentit）</h2>
+            <p>在这里添加自定义词汇，格式为：词汇 词性 词频（例如：雪地 n 100）</p>
+            <div class="dict-input">
+                <input id="dictWord" placeholder="词汇" />
+                <input id="dictPos" placeholder="词性 (n:名词, v:动词, a:形容词, d:副词)" />
+                <input id="dictFreq" placeholder="词频" type="number" value="100" />
+                <button id="addDictBtn">添加</button>
+            </div>
+            <div class="dict-list" id="dictList">
+                <!-- 自定义词典列表 -->
+            </div>
+        </div>
+
+        <h2>分词结果对比</h2>
+        <div class="result-container">
+            <div class="result-box">
+                <h3>Intl.Segmenter</h3>
+                <div class="result" id="intlResult"></div>
+                <div class="performance" id="intlPerformance"></div>
+            </div>
+            <div class="result-box">
+                <h3>segmentit</h3>
+                <div class="result" id="segmentitResult"></div>
+                <div class="performance" id="segmentitPerformance"></div>
+            </div>
+        </div>
+
+        <h2>词性标注对比</h2>
+        <div class="result-container">
+            <div class="result-box">
+                <h3>Intl.Segmenter（模拟词性标注）</h3>
+                <div class="result" id="intlPosResult"></div>
+            </div>
+            <div class="result-box">
+                <h3>segmentit</h3>
+                <div class="result" id="segmentitPosResult"></div>
+            </div>
+        </div>
+
+        <h2>功能对比表</h2>
+        <table>
+            <tr>
+                <th>功能</th>
+                <th>Intl.Segmenter</th>
+                <th>segmentit</th>
+            </tr>
+            <tr>
+                <td>分词能力</td>
+                <td>基础分词，按语言规则分割</td>
+                <td>专业中文分词，基于词典和算法</td>
+            </tr>
+            <tr>
+                <td>词性标注</td>
+                <td>不支持（需要自行实现）</td>
+                <td>支持（通过tag方法）</td>
+            </tr>
+            <tr>
+                <td>自定义词典</td>
+                <td>不支持</td>
+                <td>支持</td>
+            </tr>
+            <tr>
+                <td>多语言支持</td>
+                <td>广泛支持多种语言</td>
+                <td>主要支持中文</td>
+            </tr>
+            <tr>
+                <td>分词粒度控制</td>
+                <td>支持（word/sentence/grapheme）</td>
+                <td>有限支持</td>
+            </tr>
+            <tr>
+                <td>性能</td>
+                <td>浏览器原生实现，性能通常更好</td>
+                <td>JavaScript实现，性能可能不如原生API</td>
+            </tr>
+            <tr>
+                <td>内存占用</td>
+                <td>小</td>
+                <td>较大（需要加载词典）</td>
+            </tr>
+            <tr>
+                <td>适用场景</td>
+                <td>轻量级分词，多语言支持</td>
+                <td>专业中文分词，需要词性标注</td>
+            </tr>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化segmentit
+            const segmentit = Segmentit.useDefault(new Segmentit.Segment());
+            
+            // 自定义词典
+            const customDict = {};
+            
+            // 获取元素
+            const inputText = document.getElementById('inputText');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const intlResult = document.getElementById('intlResult');
+            const segmentitResult = document.getElementById('segmentitResult');
+            const intlPosResult = document.getElementById('intlPosResult');
+            const segmentitPosResult = document.getElementById('segmentitPosResult');
+            const intlPerformance = document.getElementById('intlPerformance');
+            const segmentitPerformance = document.getElementById('segmentitPerformance');
+            
+            // 自定义词典元素
+            const dictWord = document.getElementById('dictWord');
+            const dictPos = document.getElementById('dictPos');
+            const dictFreq = document.getElementById('dictFreq');
+            const addDictBtn = document.getElementById('addDictBtn');
+            const dictList = document.getElementById('dictList');
+            
+            // 添加自定义词典
+            addDictBtn.addEventListener('click', function() {
+                const word = dictWord.value.trim();
+                const pos = dictPos.value.trim();
+                const freq = parseInt(dictFreq.value, 10) || 100;
+                
+                if (!word) {
+                    alert('请输入词汇');
+                    return;
+                }
+                
+                if (!pos) {
+                    alert('请输入词性');
+                    return;
+                }
+                
+                // 添加到自定义词典
+                customDict[word] = { pos, freq };
+                
+                // 更新词典列表
+                updateDictList();
+                
+                // 清空输入框
+                dictWord.value = '';
+                dictPos.value = '';
+                dictFreq.value = '100';
+            });
+            
+            // 更新词典列表
+            function updateDictList() {
+                dictList.innerHTML = '';
+                
+                for (const word in customDict) {
+                    const item = document.createElement('div');
+                    item.className = 'dict-item';
+                    
+                    const info = document.createElement('span');
+                    info.textContent = `${word} [${customDict[word].pos}] ${customDict[word].freq}`;
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.textContent = '删除';
+                    removeBtn.addEventListener('click', function() {
+                        delete customDict[word];
+                        updateDictList();
+                    });
+                    
+                    item.appendChild(info);
+                    item.appendChild(removeBtn);
+                    dictList.appendChild(item);
+                }
+            }
+            
+            // 使用Intl.Segmenter进行分词
+            function useIntlSegmenter(text) {
+                const startTime = performance.now();
+                
+                // 检测语言
+                const isChineseText = /[\u4e00-\u9fa5]/.test(text);
+                
+                // 创建分词器
+                const segmenter = isChineseText ? 
+                    new Intl.Segmenter('zh-CN', { granularity: 'word' }) : 
+                    new Intl.Segmenter('en-US', { granularity: 'word' });
+                
+                // 分词
+                const segments = segmenter.segment(text);
+                
+                // 过滤停用词
+                const stopWords = isChineseText ? 
+                    new Set(['的', '了', '和', '与', '或', '在', '中', '是', '有', '被', '将', '从', '给', '向', '把', '对', '为', '以']) :
+                    new Set(['the', 'a', 'an', 'of', 'in', 'on', 'at', 'by', 'for', 'with', 'about', 'to', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 'up', 'down', 'out', 'as']);
+                
+                // 提取分词结果
+                const tokens = [];
+                for (const segment of segments) {
+                    if (segment.isWordLike && !stopWords.has(segment.segment)) {
+                        tokens.push(segment.segment);
+                    }
+                }
+                
+                const endTime = performance.now();
+                const duration = endTime - startTime;
+                
+                return { tokens, duration };
+            }
+            
+            // 使用Intl.Segmenter进行词性标注（模拟）
+            function useIntlSegmenterPOS(text) {
+                // 检测语言
+                const isChineseText = /[\u4e00-\u9fa5]/.test(text);
+                
+                // 创建分词器
+                const segmenter = isChineseText ? 
+                    new Intl.Segmenter('zh-CN', { granularity: 'word' }) : 
+                    new Intl.Segmenter('en-US', { granularity: 'word' });
+                
+                // 分词
+                const segments = segmenter.segment(text);
+                
+                // 过滤停用词
+                const stopWords = isChineseText ? 
+                    new Set(['的', '了', '和', '与', '或', '在', '中', '是', '有', '被', '将', '从', '给', '向', '把', '对', '为', '以']) :
+                    new Set(['the', 'a', 'an', 'of', 'in', 'on', 'at', 'by', 'for', 'with', 'about', 'to', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 'up', 'down', 'out', 'as']);
+                
+                // 提取分词结果并进行简单的词性判断
+                const taggedTokens = [];
+                for (const segment of segments) {
+                    if (segment.isWordLike && !stopWords.has(segment.segment)) {
+                        const word = segment.segment;
+                        
+                        // 简单的词性判断
+                        let pos = 'n'; // 默认为名词
+                        
+                        if (isChineseText) {
+                            // 中文词性判断
+                            if (/[地得]$/.test(word)) {
+                                pos = 'd'; // 副词
+                            } else if (/[了过着]$/.test(word)) {
+                                pos = 'v'; // 动词
+                            } else if (/[的]$/.test(word)) {
+                                pos = 'a'; // 形容词
+                            }
+                        } else {
+                            // 英文词性判断
+                            if (/ly$/.test(word)) {
+                                pos = 'd'; // 副词
+                            } else if (/ing$|ed$|s$/.test(word)) {
+                                pos = 'v'; // 动词
+                            } else if (/ful$|ous$|ble$|al$/.test(word)) {
+                                pos = 'a'; // 形容词
+                            }
+                        }
+                        
+                        // 检查自定义词典
+                        if (customDict[word]) {
+                            pos = customDict[word].pos;
+                        }
+                        
+                        taggedTokens.push({
+                            w: word,
+                            p: pos
+                        });
+                    }
+                }
+                
+                return taggedTokens;
+            }
+            
+            // 使用segmentit进行分词
+            function useSegmentit(text) {
+                const startTime = performance.now();
+                
+                // 添加自定义词典
+                for (const word in customDict) {
+                    const { pos, freq } = customDict[word];
+                    segmentit.addWord(word, pos, freq);
+                }
+                
+                // 分词
+                const result = segmentit.doSegment(text);
+                
+                // 提取分词结果
+                const tokens = result.map(item => item.w);
+                
+                const endTime = performance.now();
+                const duration = endTime - startTime;
+                
+                return { tokens, duration, rawResult: result };
+            }
+            
+            // 分析按钮点击事件
+            analyzeBtn.addEventListener('click', function() {
+                const text = inputText.value.trim();
+                if (!text) {
+                    alert('请输入要分析的文本');
+                    return;
+                }
+                
+                try {
+                    // 使用Intl.Segmenter进行分词
+                    const intlResult = useIntlSegmenter(text);
+                    document.getElementById('intlResult').textContent = JSON.stringify(intlResult.tokens, null, 2);
+                    document.getElementById('intlPerformance').textContent = `耗时: ${intlResult.duration.toFixed(2)}ms`;
+                    
+                    // 使用segmentit进行分词
+                    const segmentitResult = useSegmentit(text);
+                    document.getElementById('segmentitResult').textContent = JSON.stringify(segmentitResult.tokens, null, 2);
+                    document.getElementById('segmentitPerformance').textContent = `耗时: ${segmentitResult.duration.toFixed(2)}ms`;
+                    
+                    // 使用Intl.Segmenter进行词性标注（模拟）
+                    const intlPosResult = useIntlSegmenterPOS(text);
+                    document.getElementById('intlPosResult').textContent = JSON.stringify(intlPosResult, null, 2);
+                    
+                    // 使用segmentit进行词性标注
+                    document.getElementById('segmentitPosResult').textContent = JSON.stringify(segmentitResult.rawResult, null, 2);
+                } catch (error) {
+                    console.error('分析失败:', error);
+                    alert('分析失败: ' + error.message);
+                }
+            });
+            
+            // 初始分析
+            analyzeBtn.click();
+        });
+    </script>
+</body>
+</html>

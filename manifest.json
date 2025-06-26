@@ -1,0 +1,41 @@
+{
+  "id": "432c3930-493f-4013-ad33-7f880a5ed0d4",
+  "version": "1.1.2",
+  "platform": "all",
+  "arch": "all",
+  "name": "音效文件名翻译重命名",
+  "description": "将音效文件名从英文翻译成中文，支持UCS命名规范，支持AI辅助分类",
+  "author": "茶荅",
+  "homepage": "https://github.com/double2tea/EagleAudioTranslator",
+  "license": "MIT",
+  "logo": "./assets/icon.png",
+  "keywords": ["translator", "rename", "batch", "sound", "audio"],
+  "devTools": true,
+  "permissions": [
+    "eagleAPI",
+    "file",
+    "network"
+  ],
+  "minEagleVersion": "3.0.0",
+  "main": {
+    "url": "index.html",
+    "width": 900,
+    "height": 700,
+    "minWidth": 600,
+    "minHeight": 500,
+    "maxWidth": 1600,
+    "maxHeight": 1200,
+    "center": true,
+    "title": "音效文件名翻译重命名",
+    "frame": true,
+    "resizable": true,
+    "maximizable": true,
+    "transparent": false,
+    "webPreferences": {
+      "webSecurity": false,
+      "nodeIntegration": true,
+      "contextIsolation": false,
+      "enableRemoteModule": true
+    }
+  }
+}
